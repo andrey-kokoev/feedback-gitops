@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @feedback-gitops/worker dev",
-    "deploy": "pnpm --filter @feedback-gitops/worker deploy",
-    "typecheck": "pnpm --filter @feedback-gitops/worker typecheck"
+    "dev": "pnpm --filter @feedback-gitops/worker run dev",
+    "deploy": "pnpm --filter @feedback-gitops/worker run deploy",
+    "typecheck": "pnpm --filter @feedback-gitops/worker run typecheck"
   }
 }
