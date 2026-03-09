@@ -307,9 +307,9 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 .cfw-issue-card-title { font-size: 13px; margin-bottom: 8px; }
 .cfw-issue-card-meta { font-size: 12px; color: #9bb7d3; margin-bottom: 8px; }
 .cfw-badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; border: 1px solid #2f4864; background: #0d1727; color: #9bb7d3; margin-right: 4px; margin-bottom: 4px; }
-.cfw-row-actions { display: inline-flex; gap: 6px; flex-wrap: nowrap; white-space: nowrap; align-items: center; }
-.cfw-action-wrap { display: inline-flex; align-items: center; gap: 6px; }
-.cfw-action-reason { font-size: 11px; color: #7f9cbc; font-style: italic; }
+.cfw-row-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; max-width: 100%; }
+.cfw-action-wrap { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.cfw-action-reason { font-size: 11px; color: #7f9cbc; font-style: italic; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; max-width: 220px; }
 .cfw-btn-disabled { opacity: 0.5; cursor: not-allowed; }
 .cfw-sub-row td { background: rgba(11, 24, 40, 0.65); border-top: 0; }
 .cfw-sub-item { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #9bb7d3; }
