@@ -36,7 +36,7 @@ async function processMessage(payload, config) {
     }
 }
 function buildIssuePayload(submission, defaultLabels) {
-    const labels = [...new Set([...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
+    const labels = [...new Set(["agent-change-request", ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
     const contextLines = [];
     if (submission.url)
         contextLines.push(`URL: ${submission.url}`);

@@ -63,7 +63,7 @@ async function processMessage(payload: FeedbackSubmission, config: ConsumerConfi
 }
 
 function buildIssuePayload(submission: FeedbackSubmission, defaultLabels: string[]): GitHubIssuePayload {
-  const labels = [...new Set([...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
+  const labels = [...new Set(["agent-change-request", ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
 
   const contextLines: string[] = [];
   if (submission.url) contextLines.push(`URL: ${submission.url}`);
