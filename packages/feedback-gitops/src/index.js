@@ -155,7 +155,57 @@ async function listLinkedPullRequests(env, issueNumber) {
         headRefOid: String(item.headRefOid || ""),
         blockedByAgent: (item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
         readyToFinalize: !(item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
+        agentWorkState: "unknown",
+        agentWorkUpdatedAt: null,
     }));
+}
+async function resolvePullRequestAgentWorkState(env, pullRequestNumber) {
+    const response = await githubRequest(env, `/issues/${pullRequestNumber}/timeline?per_page=100`);
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`GitHub pull request timeline failed (${response.status}): ${text}`);
+    }
+    const timeline = await response.json();
+    if (!Array.isArray(timeline) || timeline.length === 0) {
+        return { agentWorkState: "unknown", agentWorkUpdatedAt: null };
+    }
+    let latestEventName = "";
+    let latestEventTime = "";
+    let latestEventAt = 0;
+    for (const event of timeline) {
+        const eventName = String(event?.event || "");
+        const createdAt = String(event?.created_at || "");
+        if (!eventName.startsWith("copilot_work_") || !createdAt)
+            continue;
+        const eventTs = Date.parse(createdAt);
+        if (Number.isNaN(eventTs))
+            continue;
+        if (eventTs <= latestEventAt)
+            continue;
+        latestEventAt = eventTs;
+        latestEventName = eventName;
+        latestEventTime = createdAt;
+    }
+    if (!latestEventName) {
+        return { agentWorkState: "unknown", agentWorkUpdatedAt: null };
+    }
+    if (latestEventName === "copilot_work_started") {
+        return { agentWorkState: "working", agentWorkUpdatedAt: latestEventTime };
+    }
+    return { agentWorkState: "finished", agentWorkUpdatedAt: latestEventTime };
+}
+async function withPullRequestAgentWorkState(env, pullRequest) {
+    try {
+        const state = await resolvePullRequestAgentWorkState(env, pullRequest.number);
+        return { ...pullRequest, ...state };
+    }
+    catch (error) {
+        console.warn("Failed to resolve pull request agent work state:", {
+            pullRequestNumber: pullRequest.number,
+            error: getErrorMessage(error, "Failed to resolve agent work state"),
+        });
+        return pullRequest;
+    }
 }
 async function resolveOpenLinkedPullRequest(env, issueNumber) {
     const linked = (await listLinkedPullRequests(env, issueNumber))
@@ -532,6 +582,9 @@ async function listIssues(env, limit, options) {
         let pullRequest = null;
         try {
             pullRequest = await resolveLatestLinkedPullRequest(env, issue.number);
+            if (pullRequest) {
+                pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
+            }
         }
         catch (error) {
             console.error("Failed to resolve linked pull request:", { issueNumber: issue.number, error });

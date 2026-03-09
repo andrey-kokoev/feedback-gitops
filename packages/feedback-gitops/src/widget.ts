@@ -573,6 +573,14 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     return { issueActions, prActions };
   }
 
+  function getAgentWorkLabel(pullRequest) {
+    if (!pullRequest || typeof pullRequest !== 'object') return '';
+    const stateValue = String(pullRequest.agentWorkState || '').toLowerCase();
+    if (stateValue === 'working') return 'Copilot: Working';
+    if (stateValue === 'finished') return 'Copilot: Finished';
+    return '';
+  }
+
   function renderEntityActions(issue, target, actions) {
     const wrap = document.createElement('div');
     wrap.className = 'cfw-row-actions';
@@ -670,6 +678,13 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
         prLink.className = 'cfw-link';
         prLink.textContent = '#' + issue.pullRequest.number + ' · ' + String(issue.pullRequest.state || '').toLowerCase();
         prTd.appendChild(prLink);
+        const prAgentLabel = getAgentWorkLabel(issue.pullRequest);
+        if (prAgentLabel) {
+          const meta = document.createElement('div');
+          meta.className = 'muted';
+          meta.textContent = prAgentLabel;
+          prTd.appendChild(meta);
+        }
       }
 
       const labelsTd = document.createElement('td');
@@ -727,7 +742,10 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
         const prStateTd = document.createElement('td');
         const prStateText = String(issue.pullRequest.state || '').toLowerCase() + (issue.pullRequest.isDraft ? ' · draft' : '');
         const prStatusDetail = typeof issue.pullRequest.statusDetail === 'string' ? issue.pullRequest.statusDetail : '';
-        prStateTd.textContent = prStateText + (prStatusDetail ? ' · ' + prStatusDetail : '');
+        const prAgentLabel = getAgentWorkLabel(issue.pullRequest);
+        prStateTd.textContent = prStateText
+          + (prStatusDetail ? ' · ' + prStatusDetail : '')
+          + (prAgentLabel ? ' · ' + prAgentLabel : '');
 
         const prColTd = document.createElement('td');
         prColTd.textContent = '-';
@@ -771,6 +789,13 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
       } else {
         cardMeta.textContent = labels.length ? '' : 'No labels';
       }
+      const cardAgentLabel = getAgentWorkLabel(issue.pullRequest);
+      if (cardAgentLabel) {
+        const agentChip = document.createElement('span');
+        agentChip.className = 'cfw-badge';
+        agentChip.textContent = cardAgentLabel;
+        cardMeta.appendChild(agentChip);
+      }
       labels.forEach((label) => {
         const chip = document.createElement('span');
         chip.className = 'cfw-badge';
@@ -793,9 +818,11 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
         prMeta.className = 'cfw-issue-card-meta';
         const prStateText = String(issue.pullRequest.state || '').toLowerCase() + (issue.pullRequest.isDraft ? ' · draft' : '');
         const prStatusDetail = typeof issue.pullRequest.statusDetail === 'string' ? issue.pullRequest.statusDetail : '';
+        const prAgentLabel = getAgentWorkLabel(issue.pullRequest);
         prMeta.innerHTML = 'PR: <a class="cfw-link" href="' + issue.pullRequest.url + '" target="_blank" rel="noopener noreferrer">#' + issue.pullRequest.number + '</a>'
           + (prStateText ? ' · ' + prStateText : '')
-          + (prStatusDetail ? ' · ' + prStatusDetail : '');
+          + (prStatusDetail ? ' · ' + prStatusDetail : '')
+          + (prAgentLabel ? ' · ' + prAgentLabel : '');
         card.appendChild(prMeta);
         card.appendChild(renderEntityActions(issue, 'pull_request', prActions));
       }
