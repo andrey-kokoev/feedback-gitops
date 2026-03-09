@@ -152,8 +152,8 @@ async function listLinkedPullRequests(env, issueNumber) {
         mergedAt: item.mergedAt || null,
         updatedAt: item.updatedAt,
         headRefOid: String(item.headRefOid || ""),
-        readyToFinalize: (item.labels?.nodes || []).some((n) => n?.name === "agent-ready-to-finalize"),
         blockedByAgent: (item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
+        readyToFinalize: !(item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
     }));
 }
 async function resolveOpenLinkedPullRequest(env, issueNumber) {
@@ -313,7 +313,7 @@ async function reconcileMergeRequestedIssues(env, limit = 200) {
         if (!pullRequest || pullRequest.state !== "OPEN")
             continue;
         if (pullRequest.isDraft) {
-            if (!pullRequest.readyToFinalize || pullRequest.blockedByAgent)
+            if (pullRequest.blockedByAgent)
                 continue;
             try {
                 await markPullRequestReadyForReview(env, pullRequest.id);
@@ -387,12 +387,12 @@ function derivePullRequestActions(labels, pullRequest) {
             actions.push({ id: "cancel_merge", label: "Cancel merge request" });
         }
         else if (pullRequest.isDraft) {
-            const ready = pullRequest.readyToFinalize && !pullRequest.blockedByAgent;
+            const ready = !pullRequest.blockedByAgent;
             actions.push({
                 id: "merge",
                 label: ready ? "Finalize & merge" : "Merge",
                 disabled: !ready,
-                reason: ready ? undefined : "Copilot agent has not signaled readiness for this commit.",
+                reason: ready ? undefined : "Pull request is blocked by agent-finalization-blocked label.",
             });
         }
         else {
@@ -620,8 +620,8 @@ async function executeAction(env, issueNumber, target, action) {
     if (action === "merge") {
         const pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
         if (pullRequest.isDraft) {
-            if (!pullRequest.readyToFinalize || pullRequest.blockedByAgent) {
-                throw new ActionError("DRAFT_NOT_READY_FOR_FINALIZE", "Draft PR cannot be finalized: Copilot agent has not signaled readiness for the current commit.");
+            if (pullRequest.blockedByAgent) {
+                throw new ActionError("DRAFT_NOT_READY_FOR_FINALIZE", "Draft PR cannot be finalized while agent-finalization-blocked label is present.");
             }
             await markPullRequestReadyForReview(env, pullRequest.id);
             await markIssueMergeRequested(env, issueNumber);
