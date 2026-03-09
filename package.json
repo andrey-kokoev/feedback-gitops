@@ -1,0 +1,10 @@
+{
+  "name": "feedback-gitops",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @feedback-gitops/worker dev",
+    "deploy": "pnpm --filter @feedback-gitops/worker deploy",
+    "typecheck": "pnpm --filter @feedback-gitops/worker typecheck"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules
+.pnpm-store
+.wrangler
+packages/*/.wrangler
+packages/*/node_modules
+packages/*/.dev.vars
+.DS_Store

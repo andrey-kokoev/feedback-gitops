@@ -1,0 +1,15 @@
+name = "feedback-gitops"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[queues.producers]]
+queue = "feedback-queue"
+binding = "FEEDBACK_QUEUE"
+
+[[queues.consumers]]
+queue = "feedback-queue"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[triggers]
+crons = ["*/5 * * * *"]
