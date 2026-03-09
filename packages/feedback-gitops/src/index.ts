@@ -34,6 +34,7 @@ interface IssueListItem {
   pullRequest: PullRequestSummary | null;
   issueActions: GitHubAction[];
   pullRequestActions: GitHubAction[];
+  mergePolicy: 'auto_unblocked' | 'manual';
 }
 
 type IssueStatus =
@@ -150,6 +151,7 @@ function normalizeSubmission(value: unknown): FeedbackSubmission | null {
     url: typeof item.url === "string" ? item.url : undefined,
     userAgent: typeof item.userAgent === "string" ? item.userAgent : undefined,
     labels,
+    mergePolicy: item.mergePolicy === 'auto_unblocked' ? 'auto_unblocked' : undefined,
   };
 }
 
@@ -371,6 +373,11 @@ function isMergeRequested(labels: string[]): boolean {
   return labels.includes("agent-merge-requested");
 }
 
+function deriveMergePolicy(labels: string[]): 'auto_unblocked' | 'manual' {
+  if (labels.includes('agent-policy-auto-merge')) return 'auto_unblocked';
+  return 'manual';
+}
+
 function deriveMergeStatusDetail(labels: string[], pullRequest: PullRequestSummary | null): string {
   if (!pullRequest || pullRequest.state !== "OPEN" || !isMergeRequested(labels)) return "";
   if (pullRequest.isDraft) return "Merge requested · waiting until PR is ready for review.";
@@ -444,16 +451,67 @@ async function listOpenMergeRequestedIssueNumbers(env: Env, limit: number): Prom
   return numbers;
 }
 
+async function listOpenAutoPolicyIssueNumbers(env: Env, limit: number): Promise<number[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 500);
+  const maxPages = Math.min(Math.ceil(safeLimit / 100), 10);
+  const numbers: number[] = [];
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await githubRequest(
+      env,
+      `/issues?state=open&labels=${encodeURIComponent("agent-policy-auto-merge")}&per_page=100&page=${page}&sort=updated&direction=desc`,
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GitHub auto-policy issues list failed (${response.status}): ${text}`);
+    }
+
+    const data = await response.json() as GitHubIssueSummary[];
+    if (!Array.isArray(data) || data.length === 0) break;
+
+    for (const issue of data) {
+      if (issue.pull_request) continue;
+      if (!Number.isInteger(issue.number) || issue.number < 1) continue;
+      numbers.push(issue.number);
+      if (numbers.length >= safeLimit) return numbers;
+    }
+
+    if (data.length < 100) break;
+  }
+
+  return numbers;
+}
+
 interface ReconcileMergeRequestsResult {
   scanned: number;
   attempted: number;
 }
 
 async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<ReconcileMergeRequestsResult> {
-  const issueNumbers = await listOpenMergeRequestedIssueNumbers(env, limit);
+  const mergeRequestedIssueNumbers = await listOpenMergeRequestedIssueNumbers(env, limit);
+  const autoPolicyIssueNumbers = await listOpenAutoPolicyIssueNumbers(env, limit);
+  const mergeRequestedSet = new Set(mergeRequestedIssueNumbers);
+  const issueNumbers = mergeRequestedIssueNumbers.slice();
+  for (const issueNumber of autoPolicyIssueNumbers) {
+    if (!mergeRequestedSet.has(issueNumber)) issueNumbers.push(issueNumber);
+  }
   let attempted = 0;
 
   for (const issueNumber of issueNumbers) {
+    const explicitMergeRequested = mergeRequestedSet.has(issueNumber);
+    if (!explicitMergeRequested) {
+      try {
+        await markIssueMergeRequested(env, issueNumber);
+      } catch (error) {
+        console.warn("Failed to auto-request merge for auto policy issue:", {
+          issueNumber,
+          error: getErrorMessage(error, "Failed to mark merge requested"),
+        });
+        continue;
+      }
+      mergeRequestedSet.add(issueNumber);
+    }
+
     let pullRequest: PullRequestSummary | null = null;
     try {
       pullRequest = await resolveLatestLinkedPullRequest(env, issueNumber);
@@ -661,6 +719,7 @@ async function listIssues(env: Env, limit: number, options: IssueListOptions): P
       status,
       statusDetail,
       pullRequest,
+      mergePolicy: deriveMergePolicy(issue.labels),
       issueActions: deriveIssueActions(issue.state, issue.labels),
       pullRequestActions: derivePullRequestActions(issue.labels, pullRequest),
     };

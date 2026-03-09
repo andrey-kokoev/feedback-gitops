@@ -44,6 +44,7 @@ function normalizeSubmission(value) {
         url: typeof item.url === "string" ? item.url : undefined,
         userAgent: typeof item.userAgent === "string" ? item.userAgent : undefined,
         labels,
+        mergePolicy: item.mergePolicy === 'auto_unblocked' ? 'auto_unblocked' : undefined,
     };
 }
 function getCorsHeaders(request) {
@@ -221,6 +222,11 @@ async function markPullRequestReadyForReview(env, pullRequestId) {
 function isMergeRequested(labels) {
     return labels.includes("agent-merge-requested");
 }
+function deriveMergePolicy(labels) {
+    if (labels.includes('agent-policy-auto-merge'))
+        return 'auto_unblocked';
+    return 'manual';
+}
 function deriveMergeStatusDetail(labels, pullRequest) {
     if (!pullRequest || pullRequest.state !== "OPEN" || !isMergeRequested(labels))
         return "";
@@ -295,10 +301,58 @@ async function listOpenMergeRequestedIssueNumbers(env, limit) {
     }
     return numbers;
 }
+async function listOpenAutoPolicyIssueNumbers(env, limit) {
+    const safeLimit = Math.min(Math.max(limit, 1), 500);
+    const maxPages = Math.min(Math.ceil(safeLimit / 100), 10);
+    const numbers = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+        const response = await githubRequest(env, `/issues?state=open&labels=${encodeURIComponent("agent-policy-auto-merge")}&per_page=100&page=${page}&sort=updated&direction=desc`);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`GitHub auto-policy issues list failed (${response.status}): ${text}`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data) || data.length === 0)
+            break;
+        for (const issue of data) {
+            if (issue.pull_request)
+                continue;
+            if (!Number.isInteger(issue.number) || issue.number < 1)
+                continue;
+            numbers.push(issue.number);
+            if (numbers.length >= safeLimit)
+                return numbers;
+        }
+        if (data.length < 100)
+            break;
+    }
+    return numbers;
+}
 async function reconcileMergeRequestedIssues(env, limit = 200) {
-    const issueNumbers = await listOpenMergeRequestedIssueNumbers(env, limit);
+    const mergeRequestedIssueNumbers = await listOpenMergeRequestedIssueNumbers(env, limit);
+    const autoPolicyIssueNumbers = await listOpenAutoPolicyIssueNumbers(env, limit);
+    const mergeRequestedSet = new Set(mergeRequestedIssueNumbers);
+    const issueNumbers = mergeRequestedIssueNumbers.slice();
+    for (const issueNumber of autoPolicyIssueNumbers) {
+        if (!mergeRequestedSet.has(issueNumber))
+            issueNumbers.push(issueNumber);
+    }
     let attempted = 0;
     for (const issueNumber of issueNumbers) {
+        const explicitMergeRequested = mergeRequestedSet.has(issueNumber);
+        if (!explicitMergeRequested) {
+            try {
+                await markIssueMergeRequested(env, issueNumber);
+            }
+            catch (error) {
+                console.warn("Failed to auto-request merge for auto policy issue:", {
+                    issueNumber,
+                    error: getErrorMessage(error, "Failed to mark merge requested"),
+                });
+                continue;
+            }
+            mergeRequestedSet.add(issueNumber);
+        }
         let pullRequest = null;
         try {
             pullRequest = await resolveLatestLinkedPullRequest(env, issueNumber);
@@ -489,6 +543,7 @@ async function listIssues(env, limit, options) {
             status,
             statusDetail,
             pullRequest,
+            mergePolicy: deriveMergePolicy(issue.labels),
             issueActions: deriveIssueActions(issue.state, issue.labels),
             pullRequestActions: derivePullRequestActions(issue.labels, pullRequest),
         };

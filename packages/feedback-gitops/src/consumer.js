@@ -36,7 +36,10 @@ async function processMessage(payload, config) {
     }
 }
 function buildIssuePayload(submission, defaultLabels) {
-    const labels = [...new Set(["agent-change-request", ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
+    const policyLabel = submission.mergePolicy === 'auto_unblocked'
+        ? 'agent-policy-auto-merge'
+        : 'agent-policy-manual-merge';
+    const labels = [...new Set(["agent-change-request", policyLabel, ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
     const contextLines = [];
     if (submission.url)
         contextLines.push(`URL: ${submission.url}`);

@@ -4,6 +4,7 @@ export interface FeedbackSubmission {
   url?: string;
   userAgent?: string;
   labels?: string[];
+  mergePolicy?: 'auto_unblocked' | 'manual';
 }
 
 export interface ConsumerConfig {
@@ -63,7 +64,10 @@ async function processMessage(payload: FeedbackSubmission, config: ConsumerConfi
 }
 
 function buildIssuePayload(submission: FeedbackSubmission, defaultLabels: string[]): GitHubIssuePayload {
-  const labels = [...new Set(["agent-change-request", ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
+  const policyLabel = submission.mergePolicy === 'auto_unblocked'
+    ? 'agent-policy-auto-merge'
+    : 'agent-policy-manual-merge';
+  const labels = [...new Set(["agent-change-request", policyLabel, ...(defaultLabels || []), ...((submission.labels || []).filter(Boolean))])];
 
   const contextLines: string[] = [];
   if (submission.url) contextLines.push(`URL: ${submission.url}`);

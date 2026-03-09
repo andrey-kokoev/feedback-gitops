@@ -54,6 +54,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
     panelOpen: false,
     draftTitle: '',
     draftDescription: '',
+    draftMergePolicy: 'manual',
     createError: '',
     listError: '',
     executeError: '',
@@ -173,6 +174,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
 
       if (typeof saved.draftTitle === 'string') state.draftTitle = saved.draftTitle;
       if (typeof saved.draftDescription === 'string') state.draftDescription = normalizeLegacyDraftDescription(saved.draftDescription);
+      if (typeof saved.draftMergePolicy === 'string') state.draftMergePolicy = saved.draftMergePolicy;
 
       if (typeof saved.createError === 'string') state.createError = saved.createError;
       if (typeof saved.listError === 'string') state.listError = saved.listError;
@@ -198,6 +200,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
         listStatusFilter: state.listStatusFilter,
         draftTitle: state.draftTitle,
         draftDescription: state.draftDescription,
+        draftMergePolicy: state.draftMergePolicy,
         createError: state.createError,
         listError: state.listError,
         executeError: state.executeError,
@@ -264,11 +267,14 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
 #cfw-panel-body { padding: 14px; overflow: auto; flex: 1; }
 #cfw-view-new, #cfw-view-requests { display: none; }
 #cfw-view-new.active, #cfw-view-requests.active { display: block; }
-#cfw-view-new input, #cfw-view-new textarea { width: 100%; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #e2f0ff; box-sizing: border-box; font-family: inherit; }
+#cfw-view-new input, #cfw-view-new textarea, #cfw-view-new select { width: 100%; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #e2f0ff; box-sizing: border-box; font-family: inherit; }
 #cfw-view-new input { height: 36px; padding: 0 12px; margin-bottom: 10px; }
 #cfw-view-new textarea { min-height: 140px; resize: vertical; padding: 10px 12px; margin-bottom: 10px; }
 #cfw-view-new input::placeholder, #cfw-view-new textarea::placeholder { color: #7f9cbc; }
-#cfw-view-new input:focus, #cfw-view-new textarea:focus { outline: none; border-color: #4f7298; background: #0f1c2f; }
+#cfw-view-new input:focus, #cfw-view-new textarea:focus, #cfw-view-new select:focus { outline: none; border-color: #4f7298; background: #0f1c2f; }
+.cfw-field-group { margin-bottom: 10px; }
+.cfw-label { display: block; font-size: 12px; color: #9bb7d3; margin-bottom: 6px; }
+.cfw-select { height: 36px; padding: 0 12px; }
 .cfw-muted-note { font-size: 11px; color: #7f9cbc; margin: -4px 0 10px; }
 #cfw-new-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
 .cfw-btn { height: 34px; padding: 0 12px; border-radius: 6px; border: 1px solid transparent; font-size: 12px; cursor: pointer; }
@@ -677,6 +683,12 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
         });
       }
 
+      const policyTd = document.createElement('td');
+      const policyBadge = document.createElement('span');
+      policyBadge.className = 'cfw-badge';
+      policyBadge.textContent = issue.mergePolicy === 'auto_unblocked' ? 'Policy: Auto' : 'Policy: Manual';
+      policyTd.appendChild(policyBadge);
+
       const { issueActions, prActions } = getActionSet(issue);
 
       const actionsTd = document.createElement('td');
@@ -687,6 +699,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       tr.appendChild(stateTd);
       tr.appendChild(prTd);
       tr.appendChild(labelsTd);
+      tr.appendChild(policyTd);
       tr.appendChild(actionsTd);
       body.appendChild(tr);
 
@@ -763,6 +776,10 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
         chip.textContent = label;
         cardMeta.appendChild(chip);
       });
+      const policyChip = document.createElement('span');
+      policyChip.className = 'cfw-badge';
+      policyChip.textContent = issue.mergePolicy === 'auto_unblocked' ? 'Policy: Auto' : 'Policy: Manual';
+      cardMeta.appendChild(policyChip);
 
       const cardActions = renderEntityActions(issue, 'issue', issueActions);
 
@@ -817,6 +834,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
 
     const titleEl = document.getElementById('cfw-title');
     const descriptionEl = document.getElementById('cfw-description');
+    const policyEl = document.getElementById('cfw-merge-policy');
     const title = titleEl ? String(titleEl.value || '').trim() : '';
     const description = descriptionEl ? String(descriptionEl.value || '').trim() : '';
 
@@ -833,6 +851,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
     setCreateLoading(true);
 
     const labels = execute ? ['agent-execute'] : [];
+    const mergePolicy = state.draftMergePolicy || 'manual';
 
     try {
       const response = await fetch(config.endpoint, {
@@ -847,6 +866,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
           url: window.location.href,
           userAgent: navigator.userAgent,
           labels,
+          mergePolicy: mergePolicy === 'auto_unblocked' ? 'auto_unblocked' : undefined,
           execute,
         }),
       });
@@ -972,6 +992,13 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       + '<section id="cfw-view-new">'
       + '<input id="cfw-title" type="text" placeholder="Title" maxlength="500" />'
       + '<textarea id="cfw-description" placeholder="Describe the requested change..." maxlength="5000"></textarea>'
+      + '<div class="cfw-field-group">'
+      + '<label class="cfw-label" for="cfw-merge-policy">Merge policy</label>'
+      + '<select id="cfw-merge-policy" class="cfw-select">'
+      + '<option value="manual">Manual merge</option>'
+      + '<option value="auto_unblocked">Auto-merge when unblocked</option>'
+      + '</select>'
+      + '</div>'
       + '<p class="cfw-muted-note">Current URL is attached automatically to the issue payload.</p>'
       + '<div id="cfw-new-error" class="cfw-error"></div>'
       + '<div id="cfw-new-actions">'
@@ -1013,7 +1040,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       + '<div id="cfw-issues-empty">No requests yet.</div>'
       + '<div id="cfw-issues-table-wrap">'
       + '<table id="cfw-issues-table" style="display:none">'
-      + '<thead><tr><th>#</th><th>Title</th><th>Status</th><th>PR</th><th>Labels</th><th>Actions</th></tr></thead>'
+      + '<thead><tr><th>#</th><th>Title</th><th>Status</th><th>PR</th><th>Labels</th><th>Policy</th><th>Actions</th></tr></thead>'
       + '<tbody id="cfw-issues-body"></tbody>'
       + '</table>'
       + '</div>'
@@ -1141,6 +1168,15 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       descriptionEl.value = state.draftDescription;
       descriptionEl.addEventListener('input', () => {
         state.draftDescription = String(descriptionEl.value || '');
+        persistState();
+      });
+    }
+
+    const policyEl = document.getElementById('cfw-merge-policy');
+    if (policyEl) {
+      policyEl.value = state.draftMergePolicy || 'manual';
+      policyEl.addEventListener('change', () => {
+        state.draftMergePolicy = String(policyEl.value || 'manual');
         persistState();
       });
     }
