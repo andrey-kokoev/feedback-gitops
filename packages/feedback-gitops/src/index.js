@@ -450,6 +450,8 @@ function deriveIssueStatus(issueState, labels, pullRequest) {
             return "pr_merge_requested";
         if (pullRequest.state === "MERGED")
             return "merged";
+        if (pullRequest.state === "CLOSED")
+            return issueState === "closed" ? "closed_unmerged" : "pr_closed_unmerged";
         if (pullRequest.state === "OPEN" && pullRequest.isDraft)
             return "pr_draft";
         if (pullRequest.state === "OPEN")
@@ -507,10 +509,10 @@ function applyIssueFilters(items, options) {
     const query = options.query.trim().toLowerCase();
     let filtered = items.slice();
     if (options.view === "active") {
-        filtered = filtered.filter((item) => ["new", "queued", "pr_draft", "pr_open", "pr_merge_requested"].includes(item.status));
+        filtered = filtered.filter((item) => ["new", "queued", "pr_draft", "pr_open", "pr_closed_unmerged", "pr_merge_requested"].includes(item.status));
     }
     else if (options.view === "needs_action") {
-        filtered = filtered.filter((item) => ["new", "pr_draft", "pr_open", "pr_merge_requested"].includes(item.status));
+        filtered = filtered.filter((item) => ["new", "pr_draft", "pr_open", "pr_closed_unmerged"].includes(item.status));
     }
     else if (options.view === "completed") {
         filtered = filtered.filter((item) => ["merged", "closed_unmerged"].includes(item.status));
@@ -521,7 +523,12 @@ function applyIssueFilters(items, options) {
     if (query) {
         filtered = filtered.filter((item) => (item.title.toLowerCase().includes(query)
             || String(item.number).includes(query)
-            || (item.pullRequest && String(item.pullRequest.number).includes(query))));
+            || (item.pullRequest && String(item.pullRequest.number).includes(query))
+            || item.labels.some((label) => String(label).toLowerCase().includes(query))
+            || String(item.status || "").toLowerCase().includes(query)
+            || String(item.statusDetail || "").toLowerCase().includes(query)
+            || String(item.mergePolicy || "").toLowerCase().includes(query)
+            || String(item.pullRequest?.agentWorkState || "").toLowerCase().includes(query)));
     }
     filtered.sort((a, b) => {
         const diff = Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
@@ -533,7 +540,6 @@ async function listIssues(env, limit, options) {
     const safeLimit = Math.min(Math.max(limit, 1), 50);
     const maxPages = 5;
     const perPage = 100;
-    const targetManaged = Math.max(safeLimit * 3, 100);
     const managedIssues = [];
     for (let page = 1; page <= maxPages; page += 1) {
         const response = await githubRequest(env, `/issues?state=all&per_page=${perPage}&page=${page}&sort=updated&direction=desc`);
@@ -565,13 +571,11 @@ async function listIssues(env, limit, options) {
             .filter((issue) => issue.managed)
             .filter((issue) => !issue.labels.includes("agent-deleted"));
         managedIssues.push(...pageManaged);
-        if (managedIssues.length >= targetManaged)
-            break;
         if (data.length < perPage)
             break;
     }
     managedIssues.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-    const issues = managedIssues.slice(0, targetManaged);
+    const issues = managedIssues.slice();
     const enriched = await Promise.all(issues.map(async (issue) => {
         let pullRequest = null;
         try {
@@ -833,7 +837,7 @@ export default {
             const viewParam = String(url.searchParams.get("view") || "all");
             const queryParam = String(url.searchParams.get("q") || "");
             const sortParam = String(url.searchParams.get("sort") || "updated_desc");
-            const allowedStatuses = new Set(["new", "queued", "pr_draft", "pr_open", "pr_merge_requested", "merged", "closed_unmerged"]);
+            const allowedStatuses = new Set(["new", "queued", "pr_draft", "pr_open", "pr_closed_unmerged", "pr_merge_requested", "merged", "closed_unmerged"]);
             const statusFilter = new Set(statusParam
                 .split(",")
                 .map((item) => item.trim())

@@ -169,8 +169,6 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
         state.listView = saved.listView;
       }
       if (saved.listSort === 'updated_desc' || saved.listSort === 'updated_asc') state.listSort = saved.listSort;
-      if (typeof saved.listQuery === 'string') state.listQuery = saved.listQuery;
-      if (Array.isArray(saved.listStatusFilter)) state.listStatusFilter = saved.listStatusFilter.filter((item) => typeof item === 'string');
 
       if (typeof saved.draftTitle === 'string') state.draftTitle = saved.draftTitle;
       if (typeof saved.draftDescription === 'string') state.draftDescription = normalizeLegacyDraftDescription(saved.draftDescription);
@@ -196,8 +194,6 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
         panelOpen: state.panelOpen,
         listView: state.listView,
         listSort: state.listSort,
-        listQuery: state.listQuery,
-        listStatusFilter: state.listStatusFilter,
         draftTitle: state.draftTitle,
         draftDescription: state.draftDescription,
         draftMergePolicy: state.draftMergePolicy,
@@ -550,6 +546,15 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
     void loadIssues(true);
   }
 
+  function clearListFilters() {
+    state.listView = 'active';
+    state.listQuery = '';
+    state.listStatusFilter = [];
+    persistState();
+    updateListControls();
+    void loadIssues(true);
+  }
+
   function updateListControls() {
     const viewEl = document.getElementById('cfw-requests-view');
     const sortEl = document.getElementById('cfw-requests-sort');
@@ -558,7 +563,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
     if (sortEl) sortEl.value = state.listSort;
     if (searchEl) searchEl.value = state.listQuery;
 
-    const statuses = ['new', 'queued', 'pr_draft', 'pr_open', 'pr_merge_requested', 'merged', 'closed_unmerged'];
+    const statuses = ['new', 'queued', 'pr_draft', 'pr_open', 'pr_closed_unmerged', 'pr_merge_requested', 'merged', 'closed_unmerged'];
     statuses.forEach((status) => {
       const chip = document.getElementById('cfw-chip-' + status);
       if (!chip) return;
@@ -1040,7 +1045,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       + '</div>'
       + '<div id="cfw-requests-controls">'
       + '<div id="cfw-requests-controls-top">'
-      + '<input id="cfw-requests-search" type="search" placeholder="Search by title, issue #, PR #" />'
+      + '<input id="cfw-requests-search" type="search" placeholder="Search title, #, labels, status, policy" />'
       + '<select id="cfw-requests-view">'
       + '<option value="active">Active</option>'
       + '<option value="needs_action">Needs action</option>'
@@ -1051,12 +1056,14 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       + '<option value="updated_desc">Newest</option>'
       + '<option value="updated_asc">Oldest</option>'
       + '</select>'
+      + '<button id="cfw-clear-filters" type="button" class="cfw-btn cfw-btn-outline">Clear</button>'
       + '</div>'
       + '<div id="cfw-status-filters">'
       + '<button id="cfw-chip-new" type="button" class="cfw-chip">New</button>'
       + '<button id="cfw-chip-queued" type="button" class="cfw-chip">Queued</button>'
       + '<button id="cfw-chip-pr_draft" type="button" class="cfw-chip">PR draft</button>'
       + '<button id="cfw-chip-pr_open" type="button" class="cfw-chip">PR open</button>'
+      + '<button id="cfw-chip-pr_closed_unmerged" type="button" class="cfw-chip">PR closed</button>'
       + '<button id="cfw-chip-pr_merge_requested" type="button" class="cfw-chip">Merge requested</button>'
       + '<button id="cfw-chip-merged" type="button" class="cfw-chip">Merged</button>'
       + '<button id="cfw-chip-closed_unmerged" type="button" class="cfw-chip">Closed</button>'
@@ -1142,6 +1149,9 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
     const refresh = document.getElementById('cfw-refresh-issues');
     if (refresh) refresh.onclick = () => loadIssues(true);
 
+    const clearFilters = document.getElementById('cfw-clear-filters');
+    if (clearFilters) clearFilters.onclick = () => clearListFilters();
+
     const requestsView = document.getElementById('cfw-requests-view');
     if (requestsView) {
       requestsView.value = state.listView;
@@ -1172,7 +1182,7 @@ export function generateWidgetScript(endpoint, defaultRepo, defaultLabels) {
       });
     }
 
-    ['new', 'queued', 'pr_draft', 'pr_open', 'pr_merge_requested', 'merged', 'closed_unmerged'].forEach((status) => {
+    ['new', 'queued', 'pr_draft', 'pr_open', 'pr_closed_unmerged', 'pr_merge_requested', 'merged', 'closed_unmerged'].forEach((status) => {
       const chip = document.getElementById('cfw-chip-' + status);
       if (!chip) return;
       chip.onclick = () => toggleStatusFilter(status);

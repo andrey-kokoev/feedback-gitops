@@ -44,6 +44,7 @@ type IssueStatus =
   | "queued"
   | "pr_draft"
   | "pr_open"
+  | "pr_closed_unmerged"
   | "pr_merge_requested"
   | "merged"
   | "closed_unmerged";
@@ -615,6 +616,7 @@ function deriveIssueStatus(issueState: "open" | "closed", labels: string[], pull
   if (pullRequest) {
     if (pullRequest.state === "OPEN" && isMergeRequested(labels)) return "pr_merge_requested";
     if (pullRequest.state === "MERGED") return "merged";
+    if (pullRequest.state === "CLOSED") return issueState === "closed" ? "closed_unmerged" : "pr_closed_unmerged";
     if (pullRequest.state === "OPEN" && pullRequest.isDraft) return "pr_draft";
     if (pullRequest.state === "OPEN") return "pr_open";
     if (issueState === "closed") return "closed_unmerged";
@@ -673,9 +675,9 @@ function applyIssueFilters(items: IssueListItem[], options: IssueListOptions): I
   let filtered = items.slice();
 
   if (options.view === "active") {
-    filtered = filtered.filter((item) => ["new", "queued", "pr_draft", "pr_open", "pr_merge_requested"].includes(item.status));
+    filtered = filtered.filter((item) => ["new", "queued", "pr_draft", "pr_open", "pr_closed_unmerged", "pr_merge_requested"].includes(item.status));
   } else if (options.view === "needs_action") {
-    filtered = filtered.filter((item) => ["new", "pr_draft", "pr_open", "pr_merge_requested"].includes(item.status));
+    filtered = filtered.filter((item) => ["new", "pr_draft", "pr_open", "pr_closed_unmerged"].includes(item.status));
   } else if (options.view === "completed") {
     filtered = filtered.filter((item) => ["merged", "closed_unmerged"].includes(item.status));
   }
@@ -689,6 +691,11 @@ function applyIssueFilters(items: IssueListItem[], options: IssueListOptions): I
       item.title.toLowerCase().includes(query)
       || String(item.number).includes(query)
       || (item.pullRequest && String(item.pullRequest.number).includes(query))
+      || item.labels.some((label) => String(label).toLowerCase().includes(query))
+      || String(item.status || "").toLowerCase().includes(query)
+      || String(item.statusDetail || "").toLowerCase().includes(query)
+      || String(item.mergePolicy || "").toLowerCase().includes(query)
+      || String(item.pullRequest?.agentWorkState || "").toLowerCase().includes(query)
     ));
   }
 
@@ -703,7 +710,6 @@ async function listIssues(env: Env, limit: number, options: IssueListOptions): P
   const safeLimit = Math.min(Math.max(limit, 1), 50);
   const maxPages = 5;
   const perPage = 100;
-  const targetManaged = Math.max(safeLimit * 3, 100);
   const managedIssues: Array<{
     number: number;
     title: string;
@@ -749,12 +755,11 @@ async function listIssues(env: Env, limit: number, options: IssueListOptions): P
       .filter((issue) => !issue.labels.includes("agent-deleted"));
 
     managedIssues.push(...pageManaged);
-    if (managedIssues.length >= targetManaged) break;
     if (data.length < perPage) break;
   }
 
   managedIssues.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-  const issues = managedIssues.slice(0, targetManaged);
+  const issues = managedIssues.slice();
 
   const enriched = await Promise.all(issues.map(async (issue) => {
     let pullRequest: PullRequestSummary | null = null;
@@ -1048,7 +1053,7 @@ export default {
       const queryParam = String(url.searchParams.get("q") || "");
       const sortParam = String(url.searchParams.get("sort") || "updated_desc");
 
-      const allowedStatuses = new Set<IssueStatus>(["new", "queued", "pr_draft", "pr_open", "pr_merge_requested", "merged", "closed_unmerged"]);
+      const allowedStatuses = new Set<IssueStatus>(["new", "queued", "pr_draft", "pr_open", "pr_closed_unmerged", "pr_merge_requested", "merged", "closed_unmerged"]);
       const statusFilter = new Set(
         statusParam
           .split(",")
