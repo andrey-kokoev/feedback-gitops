@@ -454,7 +454,7 @@ function deriveMergeStatusDetail(labels: string[], pullRequest: PullRequestSumma
     return "Merge requested · auto-merge enabled.";
   }
 
-  return "Merge requested.";
+  return "Merge requested · auto-merge not enabled (retry needed).";
 }
 
 async function maybeEnableAutoMergeForIssue(env: Env, issueNumber: number, pullRequest: PullRequestSummary | null): Promise<void> {
@@ -462,15 +462,46 @@ async function maybeEnableAutoMergeForIssue(env: Env, issueNumber: number, pullR
   if (pullRequest.isDraft) return;
   if (pullRequest.autoMergeRequestedAt) return;
 
+  await enableAndConfirmAutoMergeForIssue(env, issueNumber, pullRequest);
+}
+
+async function enableAndConfirmAutoMergeForIssue(
+  env: Env,
+  issueNumber: number,
+  pullRequest: PullRequestSummary,
+): Promise<PullRequestSummary> {
   try {
     await enableAutoMergeForPullRequest(env, pullRequest.id);
   } catch (error) {
-    console.warn("Failed to enable auto-merge:", {
-      issueNumber,
-      pullRequestNumber: pullRequest.number,
-      error: getErrorMessage(error, "Failed to enable auto-merge"),
-    });
+    const message = getErrorMessage(error, "Failed to enable auto-merge");
+    throw new ActionError(
+      "AUTO_MERGE_ENABLE_FAILED",
+      `Failed to enable auto-merge for pull request #${pullRequest.number}: ${message}`,
+    );
   }
+
+  let refreshed: PullRequestSummary | null = null;
+  try {
+    refreshed = await resolveLatestLinkedPullRequest(env, issueNumber);
+  } catch (error) {
+    const message = getErrorMessage(error, "Failed to reload pull request after enabling auto-merge");
+    throw new ActionError("AUTO_MERGE_CONFIRM_FAILED", message);
+  }
+
+  if (!refreshed || refreshed.number !== pullRequest.number || refreshed.state !== "OPEN") {
+    throw new ActionError(
+      "AUTO_MERGE_CONFIRM_FAILED",
+      `Unable to confirm auto-merge state for pull request #${pullRequest.number}.`,
+    );
+  }
+  if (!refreshed.autoMergeRequestedAt) {
+    throw new ActionError(
+      "AUTO_MERGE_NOT_ENABLED",
+      `GitHub did not report auto-merge as enabled for pull request #${pullRequest.number}. Retry merge request.`,
+    );
+  }
+
+  return refreshed;
 }
 
 async function listOpenMergeRequestedIssueNumbers(env: Env, limit: number): Promise<number[]> {
@@ -538,6 +569,14 @@ async function listOpenAutoPolicyIssueNumbers(env: Env, limit: number): Promise<
 interface ReconcileMergeRequestsResult {
   scanned: number;
   attempted: number;
+  failures: ReconcileMergeRequestFailure[];
+}
+
+interface ReconcileMergeRequestFailure {
+  issueNumber: number;
+  pullRequestNumber?: number;
+  code: string;
+  message: string;
 }
 
 async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<ReconcileMergeRequestsResult> {
@@ -549,6 +588,7 @@ async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<Rec
     if (!mergeRequestedSet.has(issueNumber)) issueNumbers.push(issueNumber);
   }
   let attempted = 0;
+  const failures: ReconcileMergeRequestFailure[] = [];
 
   for (const issueNumber of issueNumbers) {
     const explicitMergeRequested = mergeRequestedSet.has(issueNumber);
@@ -556,10 +596,12 @@ async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<Rec
       try {
         await markIssueMergeRequested(env, issueNumber);
       } catch (error) {
+        const message = getErrorMessage(error, "Failed to mark merge requested");
         console.warn("Failed to auto-request merge for auto policy issue:", {
           issueNumber,
-          error: getErrorMessage(error, "Failed to mark merge requested"),
+          error: message,
         });
+        failures.push({ issueNumber, code: "MARK_MERGE_REQUESTED_FAILED", message });
         continue;
       }
       mergeRequestedSet.add(issueNumber);
@@ -584,21 +626,37 @@ async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<Rec
       try {
         await markPullRequestReadyForReview(env, pullRequest.id);
       } catch (error) {
+        const message = getErrorMessage(error, "Failed to mark ready for review");
         console.warn("Failed to mark PR ready for review during reconcile:", {
           issueNumber,
           pullRequestNumber: pullRequest.number,
-          error: getErrorMessage(error, "Failed to mark ready for review"),
+          error: message,
+        });
+        failures.push({
+          issueNumber,
+          pullRequestNumber: pullRequest.number,
+          code: "MARK_READY_FOR_REVIEW_FAILED",
+          message,
         });
         continue;
       }
       attempted += 1;
       try {
-        await enableAutoMergeForPullRequest(env, pullRequest.id);
+        await enableAndConfirmAutoMergeForIssue(env, issueNumber, pullRequest);
       } catch (error) {
+        const message = getErrorMessage(error, "Failed to enable auto-merge");
+        const code = error instanceof ActionError ? error.code : "AUTO_MERGE_ENABLE_FAILED";
         console.warn("Failed to enable auto-merge after finalization during reconcile:", {
           issueNumber,
           pullRequestNumber: pullRequest.number,
-          error: getErrorMessage(error, "Failed to enable auto-merge"),
+          code,
+          error: message,
+        });
+        failures.push({
+          issueNumber,
+          pullRequestNumber: pullRequest.number,
+          code,
+          message,
         });
       }
       continue;
@@ -606,10 +664,27 @@ async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<Rec
 
     if (pullRequest.autoMergeRequestedAt) continue;
     attempted += 1;
-    await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
+    try {
+      await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to enable auto-merge");
+      const code = error instanceof ActionError ? error.code : "AUTO_MERGE_ENABLE_FAILED";
+      console.warn("Failed to enable auto-merge during reconcile:", {
+        issueNumber,
+        pullRequestNumber: pullRequest.number,
+        code,
+        error: message,
+      });
+      failures.push({
+        issueNumber,
+        pullRequestNumber: pullRequest.number,
+        code,
+        message,
+      });
+    }
   }
 
-  return { scanned: issueNumbers.length, attempted };
+  return { scanned: issueNumbers.length, attempted, failures };
 }
 
 function deriveIssueStatus(issueState: "open" | "closed", labels: string[], pullRequest: PullRequestSummary | null): IssueStatus {
@@ -938,18 +1013,12 @@ async function executeAction(env: Env, issueNumber: number, target: "issue" | "p
       }
       await markPullRequestReadyForReview(env, pullRequest.id);
       await markIssueMergeRequested(env, issueNumber);
-      try {
-        await enableAutoMergeForPullRequest(env, pullRequest.id);
-      } catch (error) {
-        console.warn("Failed to enable auto-merge after finalization:", {
-          issueNumber,
-          pullRequestNumber: pullRequest.number,
-          error: getErrorMessage(error, "Failed to enable auto-merge"),
-        });
-      }
+      pullRequest = await enableAndConfirmAutoMergeForIssue(env, issueNumber, pullRequest);
     } else {
       await markIssueMergeRequested(env, issueNumber);
       await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
+      pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
+      pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
     }
     return { pullRequest };
   }

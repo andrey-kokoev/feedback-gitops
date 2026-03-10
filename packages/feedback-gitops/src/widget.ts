@@ -77,6 +77,12 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     if (rawMessage.includes('AGENT_WORKING')) {
       return 'Copilot is still working on this draft pull request.';
     }
+    if (rawMessage.includes('AUTO_MERGE_ENABLE_FAILED')) {
+      return 'GitHub rejected enabling auto-merge. Check PR checks/rules and retry.';
+    }
+    if (rawMessage.includes('AUTO_MERGE_CONFIRM_FAILED') || rawMessage.includes('AUTO_MERGE_NOT_ENABLED')) {
+      return 'Merge request was recorded but auto-merge was not confirmed. Retry merge request.';
+    }
     // Fallback: return generic message for unknown errors
     return 'Failed to apply action.';
   }
