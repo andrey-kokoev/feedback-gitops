@@ -112,11 +112,6 @@ async function listLinkedPullRequests(env, issueNumber) {
               reviewDecision
               mergeStateStatus
               headRefOid
-              labels(first: 10) {
-                nodes {
-                  name
-                }
-              }
               autoMergeRequest {
                 enabledAt
               }
@@ -153,8 +148,6 @@ async function listLinkedPullRequests(env, issueNumber) {
         mergedAt: item.mergedAt || null,
         updatedAt: item.updatedAt,
         headRefOid: String(item.headRefOid || ""),
-        blockedByAgent: (item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
-        readyToFinalize: !(item.labels?.nodes || []).some((n) => n?.name === "agent-finalization-blocked"),
         agentWorkState: "unknown",
         agentWorkUpdatedAt: null,
     }));
@@ -416,8 +409,9 @@ async function reconcileMergeRequestedIssues(env, limit = 200) {
         }
         if (!pullRequest || pullRequest.state !== "OPEN")
             continue;
+        pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
         if (pullRequest.isDraft) {
-            if (pullRequest.blockedByAgent)
+            if (pullRequest.agentWorkState === "working")
                 continue;
             try {
                 await markPullRequestReadyForReview(env, pullRequest.id);
@@ -496,13 +490,7 @@ function derivePullRequestActions(labels, pullRequest) {
                 // While Copilot is still working, do not expose finalization/merge controls.
             }
             else {
-                const ready = !pullRequest.blockedByAgent;
-                actions.push({
-                    id: "merge",
-                    label: ready ? "Finalize & merge" : "Merge",
-                    disabled: !ready,
-                    reason: ready ? undefined : "Pull request is blocked by agent-finalization-blocked label.",
-                });
+                actions.push({ id: "merge", label: "Finalize & merge" });
             }
         }
         else {
@@ -732,10 +720,11 @@ async function executeAction(env, issueNumber, target, action) {
         throw new Error(`Unsupported issue action: ${action}`);
     }
     if (action === "merge") {
-        const pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
+        let pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
+        pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
         if (pullRequest.isDraft) {
-            if (pullRequest.blockedByAgent) {
-                throw new ActionError("DRAFT_NOT_READY_FOR_FINALIZE", "Draft PR cannot be finalized while agent-finalization-blocked label is present.");
+            if (pullRequest.agentWorkState === "working") {
+                throw new ActionError("AGENT_WORKING", "Copilot is still working on this draft pull request.");
             }
             await markPullRequestReadyForReview(env, pullRequest.id);
             await markIssueMergeRequested(env, issueNumber);

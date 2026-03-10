@@ -74,8 +74,8 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 
   function mapActionError(rawMessage) {
     // Map known backend error codes to user-friendly UI copy
-    if (rawMessage.includes('DRAFT_NOT_READY_FOR_FINALIZE')) {
-      return 'This draft PR cannot be finalized while agent-finalization-blocked label is present.';
+    if (rawMessage.includes('AGENT_WORKING')) {
+      return 'Copilot is still working on this draft pull request.';
     }
     // Fallback: return generic message for unknown errors
     return 'Failed to apply action.';
@@ -111,9 +111,9 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 
     if (!response.ok) {
       const code = data && data.error && typeof data.error.code === 'string' ? data.error.code : '';
-      if (code === 'DRAFT_NOT_READY_FOR_FINALIZE') {
+      if (code === 'AGENT_WORKING') {
         throw new Error(
-          'Cannot finalize while agent-finalization-blocked label is present on the pull request.',
+          'Copilot is still working on this draft pull request.',
         );
       }
       const messageFromJson = data && (data.statusMessage || (data.error && data.error.error))
