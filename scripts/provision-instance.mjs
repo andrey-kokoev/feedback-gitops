@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const workerPackageDir = path.join(repoRoot, "packages", "feedback-gitops");
@@ -26,6 +27,9 @@ function parseArgs(argv) {
 }
 
 function parseEnvFile(filePath) {
+  if (!existsSync(filePath)) {
+    return {};
+  }
   const content = readFileSync(filePath, "utf8");
   const env = {};
   for (const line of content.split(/\r?\n/)) {
@@ -41,6 +45,34 @@ function parseEnvFile(filePath) {
     env[key] = value;
   }
   return env;
+}
+
+function randomToken(bytes) {
+  return randomBytes(bytes).toString("hex");
+}
+
+function ensureEnvKeys(filePath, env) {
+  const updates = [];
+
+  if (!env.AGENT_CHANGE_REQUEST_API_KEY) {
+    env.AGENT_CHANGE_REQUEST_API_KEY = env.API_KEY || randomToken(32);
+    updates.push(`AGENT_CHANGE_REQUEST_API_KEY=${env.AGENT_CHANGE_REQUEST_API_KEY}`);
+  }
+  if (!env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN) {
+    env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN = env.ADMIN_TOKEN || randomToken(24);
+    updates.push(`AGENT_CHANGE_REQUEST_ADMIN_TOKEN=${env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN}`);
+  }
+
+  if (updates.length === 0) return;
+
+  let prefix = "";
+  if (existsSync(filePath)) {
+    const current = readFileSync(filePath, "utf8");
+    prefix = current.endsWith("\n") || current.length === 0 ? current : `${current}\n`;
+  }
+  const stamp = "# Added by feedback-gitops provisioning";
+  const payload = `${prefix}${prefix.includes(stamp) ? "" : `${stamp}\n`}${updates.join("\n")}\n`;
+  writeFileSync(filePath, payload, "utf8");
 }
 
 function usage() {
@@ -131,11 +163,12 @@ function main() {
   const repo = repoSpec.slice(slash + 1);
 
   const env = parseEnvFile(envFile);
-  const apiKey = env.API_KEY || env.AGENT_CHANGE_REQUEST_API_KEY;
-  const adminToken = env.ADMIN_TOKEN || env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN;
+  ensureEnvKeys(envFile, env);
+  const apiKey = env.AGENT_CHANGE_REQUEST_API_KEY || env.API_KEY;
+  const adminToken = env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN || env.ADMIN_TOKEN;
   const githubPat = env.GITHUB_PAT;
   if (!apiKey || !adminToken || !githubPat) {
-    throw new Error("Missing one or more required secrets in env file: API_KEY, ADMIN_TOKEN, GITHUB_PAT");
+    throw new Error("Missing required secret in env file: GITHUB_PAT (agent keys are auto-generated if absent)");
   }
 
   const tmpDir = mkdtempSync(path.join(workerPackageDir, ".tmp-provision-"));
