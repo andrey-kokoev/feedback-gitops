@@ -81,6 +81,9 @@ function usage() {
     --worker <worker-name> \\
     --repo <owner/repo> \\
     --env-file <path-to-env-file> \\
+    [--target-worker <target-worker-name>] \\
+    [--target-cwd <target-worker-directory>] \\
+    [--worker-url <feedback-worker-url>] \\
     [--queue <queue-name>] \\
     [--base-branch <branch>]
 
@@ -94,6 +97,9 @@ Example:
     --worker feedback-gitops-thoughts \\
     --repo andrey-kokoev/thoughts \\
     --env-file /home/andrey/src/thoughts/.env.local \\
+    --target-worker thoughts2 \\
+    --target-cwd /home/andrey/src/thoughts/packages/server \\
+    --worker-url https://feedback-gitops-thoughts.andrei-kokoev.workers.dev \\
     --queue feedback-queue-thoughts \\
     --base-branch main
 `);
@@ -124,8 +130,7 @@ function runAllowingQueueExists(queueName) {
     return;
   }
   if (output.includes("already exists") || output.includes("already taken")) {
-    process.stdout.write(result.stdout || "");
-    process.stderr.write(result.stderr || "");
+    console.log(`[provision] Queue '${queueName}' already exists. Reusing.`);
     return;
   }
   process.stdout.write(result.stdout || "");
@@ -142,6 +147,13 @@ function buildConfig(workerName, queueName) {
     .replace(/(\[\[queues\.consumers\]\][\s\S]*?queue\s*=\s*)".*"/m, `$1"${queueName}"`);
 }
 
+function putWorkerSecret({ cwd, workerName, key, value }) {
+  run("npx", ["wrangler", "secret", "put", key, "--name", workerName], {
+    cwd,
+    input: `${value}\n`,
+  });
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.worker || !args.repo || !args["env-file"]) {
@@ -154,6 +166,9 @@ function main() {
   const envFile = path.resolve(String(args["env-file"]).trim());
   const queueName = args.queue ? String(args.queue).trim() : `${workerName}-queue`;
   const baseBranch = args["base-branch"] ? String(args["base-branch"]).trim() : "main";
+  const targetWorkerName = args["target-worker"] ? String(args["target-worker"]).trim() : "";
+  const targetWorkerCwd = args["target-cwd"] ? path.resolve(String(args["target-cwd"]).trim()) : "";
+  const workerUrlArg = args["worker-url"] ? String(args["worker-url"]).trim().replace(/\/+$/, "") : "";
 
   const slash = repoSpec.indexOf("/");
   if (slash <= 0 || slash >= repoSpec.length - 1) {
@@ -199,6 +214,28 @@ function main() {
 
     console.log(`[provision] Deploying worker: ${workerName}`);
     run("npx", ["wrangler", "deploy", "--config", configPath], { cwd: workerPackageDir });
+
+    if (targetWorkerName) {
+      const targetCwd = targetWorkerCwd || path.dirname(envFile);
+      const targetSecrets = {
+        AGENT_CHANGE_REQUEST_API_KEY: apiKey,
+        AGENT_CHANGE_REQUEST_ADMIN_TOKEN: adminToken,
+      };
+      if (workerUrlArg) {
+        targetSecrets.AGENT_CHANGE_REQUEST_WORKER_URL = workerUrlArg;
+      }
+
+      console.log(`[provision] Wiring target worker: ${targetWorkerName}`);
+      for (const [key, value] of Object.entries(targetSecrets)) {
+        console.log(`[provision] Setting target secret: ${key}`);
+        putWorkerSecret({
+          cwd: targetCwd,
+          workerName: targetWorkerName,
+          key,
+          value,
+        });
+      }
+    }
 
     console.log("");
     console.log("Provisioning complete.");
