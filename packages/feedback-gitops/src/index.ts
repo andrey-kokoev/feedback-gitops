@@ -422,6 +422,53 @@ async function markPullRequestReadyForReview(env: Env, pullRequestId: string): P
   );
 }
 
+async function mergePullRequestNow(
+  env: Env,
+  pullRequest: PullRequestSummary,
+  commitHeadline = "Auto-merge via feedback-gitops",
+): Promise<void> {
+  interface MergePullRequestData {
+    mergePullRequest?: {
+      pullRequest?: {
+        id?: string;
+        merged?: boolean;
+        mergedAt?: string | null;
+      } | null;
+    } | null;
+  }
+
+  const data = await githubGraphqlRequest<MergePullRequestData>(
+    env,
+    `mutation MergePullRequestNow($pullRequestId: ID!, $expectedHeadOid: GitObjectID!, $commitHeadline: String!) {
+      mergePullRequest(input: {
+        pullRequestId: $pullRequestId
+        mergeMethod: SQUASH
+        expectedHeadOid: $expectedHeadOid
+        commitHeadline: $commitHeadline
+      }) {
+        pullRequest {
+          id
+          merged
+          mergedAt
+        }
+      }
+    }`,
+    {
+      pullRequestId: pullRequest.id,
+      expectedHeadOid: pullRequest.headRefOid,
+      commitHeadline,
+    },
+  );
+
+  const merged = Boolean(data.mergePullRequest?.pullRequest?.merged);
+  if (!merged) {
+    throw new ActionError(
+      "DIRECT_MERGE_FAILED",
+      `GitHub did not confirm direct merge for pull request #${pullRequest.number}.`,
+    );
+  }
+}
+
 function isMergeRequested(labels: string[]): boolean {
   return labels.includes("agent-merge-requested");
 }
@@ -449,6 +496,7 @@ function deriveMergeStatusDetail(labels: string[], pullRequest: PullRequestSumma
   if (state === "UNSTABLE") return "Merge requested · checks are still in progress.";
   if (state === "HAS_HOOKS") return "Merge requested · waiting on required checks.";
   if (state === "UNKNOWN") return "Merge requested · GitHub is computing mergeability.";
+  if (state === "CLEAN") return "Merge requested · ready for direct merge.";
 
   if (pullRequest.autoMergeRequestedAt) {
     return "Merge requested · auto-merge enabled.";
@@ -664,6 +712,28 @@ async function reconcileMergeRequestedIssues(env: Env, limit = 200): Promise<Rec
 
     if (pullRequest.autoMergeRequestedAt) continue;
     attempted += 1;
+    const mergeState = String(pullRequest.mergeStateStatus || "UNKNOWN").toUpperCase();
+    if (mergeState === "CLEAN") {
+      try {
+        await mergePullRequestNow(env, pullRequest);
+      } catch (error) {
+        const message = getErrorMessage(error, "Failed to directly merge pull request");
+        const code = error instanceof ActionError ? error.code : "DIRECT_MERGE_FAILED";
+        console.warn("Failed to directly merge during reconcile:", {
+          issueNumber,
+          pullRequestNumber: pullRequest.number,
+          code,
+          error: message,
+        });
+        failures.push({
+          issueNumber,
+          pullRequestNumber: pullRequest.number,
+          code,
+          message,
+        });
+      }
+      continue;
+    }
     try {
       await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
     } catch (error) {
@@ -1016,9 +1086,18 @@ async function executeAction(env: Env, issueNumber: number, target: "issue" | "p
       pullRequest = await enableAndConfirmAutoMergeForIssue(env, issueNumber, pullRequest);
     } else {
       await markIssueMergeRequested(env, issueNumber);
-      await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
-      pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
-      pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
+      const mergeState = String(pullRequest.mergeStateStatus || "UNKNOWN").toUpperCase();
+      if (mergeState === "CLEAN") {
+        await mergePullRequestNow(env, pullRequest);
+      } else {
+        await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
+      }
+      const refreshedPullRequest = await resolveLatestLinkedPullRequest(env, issueNumber);
+      if (refreshedPullRequest && refreshedPullRequest.state === "OPEN") {
+        pullRequest = await withPullRequestAgentWorkState(env, refreshedPullRequest);
+      } else if (refreshedPullRequest) {
+        pullRequest = refreshedPullRequest;
+      }
     }
     return { pullRequest };
   }

@@ -262,6 +262,30 @@ async function markPullRequestReadyForReview(env, pullRequestId) {
       }
     }`, { pullRequestId });
 }
+async function mergePullRequestNow(env, pullRequest, commitHeadline = "Auto-merge via feedback-gitops") {
+    const data = await githubGraphqlRequest(env, `mutation MergePullRequestNow($pullRequestId: ID!, $expectedHeadOid: GitObjectID!, $commitHeadline: String!) {
+      mergePullRequest(input: {
+        pullRequestId: $pullRequestId
+        mergeMethod: SQUASH
+        expectedHeadOid: $expectedHeadOid
+        commitHeadline: $commitHeadline
+      }) {
+        pullRequest {
+          id
+          merged
+          mergedAt
+        }
+      }
+    }`, {
+        pullRequestId: pullRequest.id,
+        expectedHeadOid: pullRequest.headRefOid,
+        commitHeadline,
+    });
+    const merged = Boolean(data.mergePullRequest?.pullRequest?.merged);
+    if (!merged) {
+        throw new ActionError("DIRECT_MERGE_FAILED", `GitHub did not confirm direct merge for pull request #${pullRequest.number}.`);
+    }
+}
 function isMergeRequested(labels) {
     return labels.includes("agent-merge-requested");
 }
@@ -294,6 +318,8 @@ function deriveMergeStatusDetail(labels, pullRequest) {
         return "Merge requested · waiting on required checks.";
     if (state === "UNKNOWN")
         return "Merge requested · GitHub is computing mergeability.";
+    if (state === "CLEAN")
+        return "Merge requested · ready for direct merge.";
     if (pullRequest.autoMergeRequestedAt) {
         return "Merge requested · auto-merge enabled.";
     }
@@ -474,6 +500,29 @@ async function reconcileMergeRequestedIssues(env, limit = 200) {
         if (pullRequest.autoMergeRequestedAt)
             continue;
         attempted += 1;
+        const mergeState = String(pullRequest.mergeStateStatus || "UNKNOWN").toUpperCase();
+        if (mergeState === "CLEAN") {
+            try {
+                await mergePullRequestNow(env, pullRequest);
+            }
+            catch (error) {
+                const message = getErrorMessage(error, "Failed to directly merge pull request");
+                const code = error instanceof ActionError ? error.code : "DIRECT_MERGE_FAILED";
+                console.warn("Failed to directly merge during reconcile:", {
+                    issueNumber,
+                    pullRequestNumber: pullRequest.number,
+                    code,
+                    error: message,
+                });
+                failures.push({
+                    issueNumber,
+                    pullRequestNumber: pullRequest.number,
+                    code,
+                    message,
+                });
+            }
+            continue;
+        }
         try {
             await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
         }
@@ -788,9 +837,20 @@ async function executeAction(env, issueNumber, target, action) {
         }
         else {
             await markIssueMergeRequested(env, issueNumber);
-            await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
-            pullRequest = await resolveOpenLinkedPullRequest(env, issueNumber);
-            pullRequest = await withPullRequestAgentWorkState(env, pullRequest);
+            const mergeState = String(pullRequest.mergeStateStatus || "UNKNOWN").toUpperCase();
+            if (mergeState === "CLEAN") {
+                await mergePullRequestNow(env, pullRequest);
+            }
+            else {
+                await maybeEnableAutoMergeForIssue(env, issueNumber, pullRequest);
+            }
+            const refreshedPullRequest = await resolveLatestLinkedPullRequest(env, issueNumber);
+            if (refreshedPullRequest && refreshedPullRequest.state === "OPEN") {
+                pullRequest = await withPullRequestAgentWorkState(env, refreshedPullRequest);
+            }
+            else if (refreshedPullRequest) {
+                pullRequest = refreshedPullRequest;
+            }
         }
         return { pullRequest };
     }
