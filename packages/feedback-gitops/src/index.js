@@ -826,7 +826,7 @@ export default {
         }
         if (request.method === "GET" && url.pathname === "/widget.js") {
             const repo = `${env.GITHUB_REPO_OWNER}/${env.GITHUB_REPO_NAME}`;
-            const script = generateWidgetScript(`${url.origin}/api/issue`, repo, ["agent-execute"]);
+            const script = generateWidgetScript(`${url.origin}/api/issue`, repo, []);
             return new Response(script, {
                 headers: {
                     "Content-Type": "application/javascript; charset=utf-8",
@@ -968,7 +968,7 @@ export default {
                 pat: env.GITHUB_PAT,
                 owner: env.GITHUB_REPO_OWNER,
                 repo: env.GITHUB_REPO_NAME,
-                labels: ["agent-execute"],
+                labels: [],
                 baseBranch: env.GITHUB_BASE_BRANCH || "main",
             },
         };
