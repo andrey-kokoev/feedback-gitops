@@ -791,7 +791,7 @@ export default {
             });
         }
         if (request.method === "GET" && url.pathname === "/health") {
-            return json({ ok: true, service: "feedback-gitops" }, { headers: corsHeaders });
+            return json({ ok: true, service: "feedback-gitops-thoughts" }, { headers: corsHeaders });
         }
         if (request.method === "POST" && url.pathname === "/api/issue") {
             const apiKey = request.headers.get("X-API-Key");

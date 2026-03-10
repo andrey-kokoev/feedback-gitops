@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "pnpm --filter @feedback-gitops/worker run dev",
     "deploy": "pnpm --filter @feedback-gitops/worker run deploy",
-    "typecheck": "pnpm --filter @feedback-gitops/worker run typecheck"
+    "typecheck": "pnpm --filter @feedback-gitops/worker run typecheck",
+    "provision:instance": "node scripts/provision-instance.mjs"
   }
 }

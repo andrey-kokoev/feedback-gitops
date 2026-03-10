@@ -25,12 +25,12 @@ wrangler queues create feedback-queue
 Set secrets:
 
 ```bash
-wrangler secret put API_KEY --name feedback-gitops
-wrangler secret put ADMIN_TOKEN --name feedback-gitops
-wrangler secret put GITHUB_PAT --name feedback-gitops
-wrangler secret put GITHUB_REPO_OWNER --name feedback-gitops
-wrangler secret put GITHUB_REPO_NAME --name feedback-gitops
-wrangler secret put GITHUB_BASE_BRANCH --name feedback-gitops
+wrangler secret put API_KEY --name feedback-gitops-thoughts
+wrangler secret put ADMIN_TOKEN --name feedback-gitops-thoughts
+wrangler secret put GITHUB_PAT --name feedback-gitops-thoughts
+wrangler secret put GITHUB_REPO_OWNER --name feedback-gitops-thoughts
+wrangler secret put GITHUB_REPO_NAME --name feedback-gitops-thoughts
+wrangler secret put GITHUB_BASE_BRANCH --name feedback-gitops-thoughts
 ```
 
 ## Run and deploy
@@ -52,5 +52,5 @@ pnpm run deploy
 Fallback mode via public URL is still supported with:
 
 ```env
-AGENT_CHANGE_REQUEST_WORKER_URL=https://feedback-gitops.andrei-kokoev.workers.dev
+AGENT_CHANGE_REQUEST_WORKER_URL=https://feedback-gitops-thoughts.andrei-kokoev.workers.dev
 ```
