@@ -488,16 +488,22 @@ function derivePullRequestActions(labels, pullRequest) {
     const actions = [];
     if (pullRequest.state === "OPEN") {
         if (isMergeRequested(labels)) {
-            actions.push({ id: "cancel_merge", label: "Cancel merge request" });
+            actions.push({ id: "cancel_merge", label: "Cancel" });
+            return actions;
         }
         else if (pullRequest.isDraft) {
-            const ready = !pullRequest.blockedByAgent;
-            actions.push({
-                id: "merge",
-                label: ready ? "Finalize & merge" : "Merge",
-                disabled: !ready,
-                reason: ready ? undefined : "Pull request is blocked by agent-finalization-blocked label.",
-            });
+            if (pullRequest.agentWorkState === "working") {
+                // While Copilot is still working, do not expose finalization/merge controls.
+            }
+            else {
+                const ready = !pullRequest.blockedByAgent;
+                actions.push({
+                    id: "merge",
+                    label: ready ? "Finalize & merge" : "Merge",
+                    disabled: !ready,
+                    reason: ready ? undefined : "Pull request is blocked by agent-finalization-blocked label.",
+                });
+            }
         }
         else {
             actions.push({ id: "merge", label: "Request merge" });

@@ -654,8 +654,12 @@ function derivePullRequestActions(labels: string[], pullRequest: PullRequestSumm
   const actions: GitHubAction[] = [];
   if (pullRequest.state === "OPEN") {
     if (isMergeRequested(labels)) {
-      actions.push({ id: "cancel_merge", label: "Cancel merge request" });
+      actions.push({ id: "cancel_merge", label: "Cancel" });
+      return actions;
     } else if (pullRequest.isDraft) {
+      if (pullRequest.agentWorkState === "working") {
+        // While Copilot is still working, do not expose finalization/merge controls.
+      } else {
       const ready = !pullRequest.blockedByAgent;
       actions.push({
         id: "merge",
@@ -663,6 +667,7 @@ function derivePullRequestActions(labels: string[], pullRequest: PullRequestSumm
         disabled: !ready,
         reason: ready ? undefined : "Pull request is blocked by agent-finalization-blocked label.",
       });
+      }
     } else {
       actions.push({ id: "merge", label: "Request merge" });
     }
