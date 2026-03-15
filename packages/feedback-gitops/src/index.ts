@@ -191,8 +191,7 @@ function getAudioExtension(mimeType: string): string {
 async function normalizeAudioSubmission(request: Request, env: Env): Promise<FeedbackSubmission | null> {
   const formData = await request.formData();
   const audioValue = formData.get("audio");
-  if (!(audioValue instanceof File)) return null;
-  if (audioValue.size < 1) return null;
+  if (!(audioValue instanceof Blob) || audioValue.size < 1) return null;
 
   const mimeType = String(formData.get("mimeType") || audioValue.type || "audio/webm");
   const durationMsRaw = Number(formData.get("durationMs"));

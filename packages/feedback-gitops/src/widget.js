@@ -500,6 +500,9 @@ ${inlineRecorderSource}
   .cfw-is-error { font-size: 13px; color: #ff9a9a; display: none; margin-bottom: 10px; }
   .cfw-is-error.active { display: block; }
   .cfw-mbs-close { width: 100%; height: 48px; border-radius: 8px; border: 1px solid #2f4864; background: transparent; color: #9bb7d3; font-size: 14px; cursor: pointer; margin-top: 8px; }
+}
+@media (min-width: 681px) {
+  #cfw-mobile, #cfw-mobile-launcher, #cfw-swipe-hint { display: none !important; }
 }\`;
     return style;
   }
