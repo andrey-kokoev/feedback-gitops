@@ -2,6 +2,13 @@ name = "feedback-gitops-thoughts"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+[ai]
+binding = "AI"
+
+[[r2_buckets]]
+binding = "feedback_gitops_audio"
+bucket_name = "feedback-gitops-audio"
+
 [[queues.producers]]
 queue = "feedback-queue"
 binding = "FEEDBACK_QUEUE"

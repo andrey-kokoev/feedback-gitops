@@ -1,6 +1,18 @@
-export interface FeedbackSubmission {
+export interface TextFeedbackInput {
+  type: "text";
   title: string;
   description: string;
+}
+
+export interface AudioFeedbackInput {
+  type: "audio";
+  audioKey: string;
+  mimeType?: string;
+  durationMs?: number;
+}
+
+export interface FeedbackSubmission {
+  input: TextFeedbackInput | AudioFeedbackInput;
   url?: string;
   userAgent?: string;
   labels?: string[];
@@ -15,12 +27,21 @@ export interface ConsumerConfig {
     labels: string[];
     baseBranch?: string;
   };
+  audio: {
+    bucket: R2Bucket;
+    ai?: Ai;
+  };
 }
 
 interface GitHubIssuePayload {
   title: string;
   body: string;
   labels: string[];
+}
+
+interface ResolvedRequestContent {
+  title: string;
+  description: string;
 }
 
 export function createIssueConsumer<T>(config: ConsumerConfig) {
@@ -47,7 +68,15 @@ export function createIssueConsumer<T>(config: ConsumerConfig) {
 function isValidSubmission(value: unknown): value is FeedbackSubmission {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
-  return typeof item.title === "string" && item.title.trim().length > 0;
+  const input = item.input as Record<string, unknown> | undefined;
+  if (!input || typeof input !== "object" || typeof input.type !== "string") return false;
+  if (input.type === "text") {
+    return typeof input.title === "string" && input.title.trim().length > 0;
+  }
+  if (input.type === "audio") {
+    return typeof input.audioKey === "string" && input.audioKey.trim().length > 0;
+  }
+  return false;
 }
 
 async function processMessage(payload: FeedbackSubmission, config: ConsumerConfig): Promise<void> {
@@ -55,15 +84,84 @@ async function processMessage(payload: FeedbackSubmission, config: ConsumerConfi
     throw new Error("Invalid submission payload");
   }
 
-  const issuePayload = buildIssuePayload(payload, config.github.labels);
+  const inputType = payload.input.type;
+  console.log(`[pipeline:1] processing message type=${inputType}`);
+
+  const content = await resolveRequestContent(payload, config.audio);
+  console.log(`[pipeline:5] content resolved: title="${content.title}" description_len=${content.description.length}`);
+
+  const issuePayload = buildIssuePayload(payload, content, config.github.labels);
+  console.log(`[pipeline:6] issue payload built: labels=${JSON.stringify(issuePayload.labels)}`);
+
+  console.log(`[pipeline:7] creating GitHub issue`);
   const created = await createGitHubIssue(issuePayload, config.github);
+  console.log(`[pipeline:8] GitHub issue created: #${created.number} url=${created.html_url}`);
+
   const labels = issuePayload.labels || [];
   if (labels.includes("agent-execute")) {
     await assignIssueToCopilot(created.number, config.github);
   }
+  if (payload.input.type === "audio") {
+    await config.audio.bucket.delete(payload.input.audioKey);
+    console.log(`[pipeline:9] audio object deleted: ${payload.input.audioKey}`);
+  }
 }
 
-function buildIssuePayload(submission: FeedbackSubmission, defaultLabels: string[]): GitHubIssuePayload {
+async function resolveRequestContent(
+  submission: FeedbackSubmission,
+  audio: ConsumerConfig["audio"],
+): Promise<ResolvedRequestContent> {
+  if (submission.input.type === "text") {
+    return {
+      title: submission.input.title,
+      description: submission.input.description,
+    };
+  }
+
+  console.log(`[pipeline:2] fetching R2 object: ${submission.input.audioKey}`);
+  const object = await audio.bucket.get(submission.input.audioKey);
+  if (!object) {
+    console.error(`[pipeline:2] R2 object not found: ${submission.input.audioKey}`);
+    throw new Error(`Audio object not found: ${submission.input.audioKey}`);
+  }
+  if (!audio.ai) {
+    console.error(`[pipeline:2] AI binding missing`);
+    throw new Error("Missing AI binding (Workers AI)");
+  }
+
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  console.log(`[pipeline:3] R2 object fetched: ${bytes.length} bytes, mimeType=${submission.input.mimeType}`);
+
+  console.log(`[pipeline:4] whisper transcription start`);
+  const response = await audio.ai.run("@cf/openai/whisper", {
+    audio: Array.from(bytes),
+  }) as { text?: string };
+  const transcript = String(response?.text || "").trim();
+  if (!transcript) {
+    console.error(`[pipeline:4] whisper returned no text`);
+    throw new Error("Workers AI whisper returned no text");
+  }
+  console.log(`[pipeline:4] whisper transcription complete: transcript_len=${transcript.length}`);
+
+  return {
+    title: deriveTitleFromTranscript(transcript),
+    description: transcript,
+  };
+}
+
+function deriveTitleFromTranscript(transcript: string): string {
+  const collapsed = transcript.replace(/\s+/g, " ").trim();
+  if (!collapsed) return "Voice request";
+  const sentence = collapsed.split(/[.!?]/, 1)[0]?.trim() || collapsed;
+  const limited = sentence.split(" ").slice(0, 12).join(" ").trim();
+  return limited.length > 80 ? limited.slice(0, 77).trimEnd() + "..." : limited;
+}
+
+function buildIssuePayload(
+  submission: FeedbackSubmission,
+  content: ResolvedRequestContent,
+  defaultLabels: string[],
+): GitHubIssuePayload {
   const policyLabel = submission.mergePolicy === 'auto_unblocked'
     ? 'agent-policy-auto-merge'
     : 'agent-policy-manual-merge';
@@ -72,12 +170,19 @@ function buildIssuePayload(submission: FeedbackSubmission, defaultLabels: string
   const contextLines: string[] = [];
   if (submission.url) contextLines.push(`URL: ${submission.url}`);
   if (submission.userAgent) contextLines.push(`User-Agent: ${submission.userAgent}`);
+  if (submission.input.type === "audio") {
+    contextLines.push(`Input-Type: audio`);
+    if (submission.input.durationMs) contextLines.push(`Audio-Duration-Ms: ${submission.input.durationMs}`);
+    if (submission.input.mimeType) contextLines.push(`Audio-Mime-Type: ${submission.input.mimeType}`);
+  } else {
+    contextLines.push("Input-Type: text");
+  }
   contextLines.push(`Timestamp: ${new Date().toISOString()}`);
   contextLines.push("Source: agent-change-request");
-  const description = String(submission.description || "").trim();
+  const description = String(content.description || "").trim();
 
   return {
-    title: submission.title,
+    title: content.title,
     body: [
       ...(description ? [description, ""] : []),
       "**Context:**",

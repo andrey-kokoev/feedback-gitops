@@ -3,12 +3,14 @@ import { generateWidgetScript } from "./widget";
 
 interface Env {
   FEEDBACK_QUEUE: Queue;
+  feedback_gitops_audio: R2Bucket;
   GITHUB_PAT: string;
   GITHUB_REPO_OWNER: string;
   GITHUB_REPO_NAME: string;
   GITHUB_BASE_BRANCH?: string;
   API_KEY: string;
   ADMIN_TOKEN?: string;
+  AI?: Ai;
 }
 
 interface GitHubIssueSummary {
@@ -121,6 +123,11 @@ interface PullRequestTimelineEvent {
   created_at?: string;
 }
 
+function getServiceName(request: Request): string {
+  const hostname = new URL(request.url).hostname;
+  return hostname.split(".")[0] || "feedback-gitops";
+}
+
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
@@ -138,25 +145,76 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function isFeedbackSubmission(value: unknown): value is FeedbackSubmission {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Record<string, unknown>;
-  return typeof item.title === "string" && item.title.trim().length > 0;
-}
-
 function normalizeSubmission(value: unknown): FeedbackSubmission | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
-  if (typeof item.title !== "string" || item.title.trim().length === 0) return null;
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  if (!title) return null;
 
   const labels = Array.isArray(item.labels) ? item.labels.filter((label) => typeof label === "string") as string[] : undefined;
   return {
-    title: item.title,
-    description: typeof item.description === "string" ? item.description : "",
+    input: {
+      type: "text",
+      title,
+      description: typeof item.description === "string" ? item.description : "",
+    },
     url: typeof item.url === "string" ? item.url : undefined,
     userAgent: typeof item.userAgent === "string" ? item.userAgent : undefined,
     labels,
     mergePolicy: item.mergePolicy === 'auto_unblocked' ? 'auto_unblocked' : undefined,
+  };
+}
+
+function parseLabelsField(raw: FormDataEntryValue | null): string[] | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const labels = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      return labels.length ? labels : undefined;
+    }
+  } catch {
+    // Fall back to comma-separated labels.
+  }
+  const labels = raw.split(",").map((item) => item.trim()).filter(Boolean);
+  return labels.length ? labels : undefined;
+}
+
+function getAudioExtension(mimeType: string): string {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
+  if (mimeType.includes("mpeg")) return "mp3";
+  if (mimeType.includes("wav")) return "wav";
+  return "bin";
+}
+
+async function normalizeAudioSubmission(request: Request, env: Env): Promise<FeedbackSubmission | null> {
+  const formData = await request.formData();
+  const audioValue = formData.get("audio");
+  if (!(audioValue instanceof File)) return null;
+  if (audioValue.size < 1) return null;
+
+  const mimeType = String(formData.get("mimeType") || audioValue.type || "audio/webm");
+  const durationMsRaw = Number(formData.get("durationMs"));
+  const durationMs = Number.isFinite(durationMsRaw) && durationMsRaw > 0 ? Math.round(durationMsRaw) : undefined;
+  const extension = getAudioExtension(mimeType);
+  const audioKey = `audio-requests/${crypto.randomUUID()}.${extension}`;
+
+  await env.feedback_gitops_audio.put(audioKey, await audioValue.arrayBuffer(), {
+    httpMetadata: { contentType: mimeType },
+  });
+
+  return {
+    input: {
+      type: "audio",
+      audioKey,
+      mimeType,
+      durationMs,
+    },
+    url: typeof formData.get("url") === "string" ? String(formData.get("url")) : undefined,
+    userAgent: typeof formData.get("userAgent") === "string" ? String(formData.get("userAgent")) : undefined,
+    labels: parseLabelsField(formData.get("labels")),
+    mergePolicy: formData.get("mergePolicy") === "auto_unblocked" ? "auto_unblocked" : undefined,
   };
 }
 
@@ -171,6 +229,15 @@ function getCorsHeaders(request: Request): HeadersInit {
 
 function getAdminTokenFromRequest(request: Request): string {
   return request.headers.get("X-Admin-Token") || "";
+}
+
+function isAuthorizedRequest(request: Request, env: Env): boolean {
+  const adminToken = getAdminTokenFromRequest(request);
+  if (env.ADMIN_TOKEN && adminToken) {
+    return adminToken === env.ADMIN_TOKEN;
+  }
+  const apiKey = request.headers.get("X-API-Key");
+  return apiKey === env.API_KEY;
 }
 
 async function githubRequest(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
@@ -1148,30 +1215,26 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "feedback-gitops-thoughts" }, { headers: corsHeaders });
+      return json({ ok: true, service: getServiceName(request) }, { headers: corsHeaders });
     }
 
     if (request.method === "POST" && url.pathname === "/api/issue") {
-      const apiKey = request.headers.get("X-API-Key");
-      if (apiKey !== env.API_KEY) {
+      if (!isAuthorizedRequest(request, env)) {
         return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
       }
-      if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-        return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-      }
 
-      let payload: unknown;
+      let submission: FeedbackSubmission | null = null;
       try {
-        payload = await request.json();
+        const contentType = (request.headers.get("content-type") || "").toLowerCase();
+        if (contentType.includes("multipart/form-data")) {
+          submission = await normalizeAudioSubmission(request, env);
+        } else {
+          submission = normalizeSubmission(await request.json());
+        }
       } catch {
-        return json(errorPayload("Invalid JSON body", "INVALID_JSON"), { status: 400, headers: corsHeaders });
+        return json(errorPayload("Invalid request body", "INVALID_JSON"), { status: 400, headers: corsHeaders });
       }
 
-      if (!isFeedbackSubmission(payload)) {
-        return json(errorPayload("Invalid submission payload", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
-      }
-
-      const submission = normalizeSubmission(payload);
       if (!submission) {
         return json(errorPayload("Invalid submission payload", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
       }
@@ -1187,12 +1250,8 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/api/issues") {
-      const apiKey = request.headers.get("X-API-Key");
-      if (apiKey !== env.API_KEY) {
+      if (!isAuthorizedRequest(request, env)) {
         return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-      }
-      if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-        return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
       }
 
       const limit = Number(url.searchParams.get("limit") || "20");
@@ -1229,12 +1288,8 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/action") {
-      const apiKey = request.headers.get("X-API-Key");
-      if (apiKey !== env.API_KEY) {
+      if (!isAuthorizedRequest(request, env)) {
         return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-      }
-      if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-        return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
       }
 
       let body: unknown;
@@ -1271,12 +1326,8 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/reconcile-merge-requests") {
-      const apiKey = request.headers.get("X-API-Key");
-      if (apiKey !== env.API_KEY) {
+      if (!isAuthorizedRequest(request, env)) {
         return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-      }
-      if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-        return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
       }
 
       try {
@@ -1300,6 +1351,10 @@ export default {
         repo: env.GITHUB_REPO_NAME,
         labels: [],
         baseBranch: env.GITHUB_BASE_BRANCH || "main",
+      },
+      audio: {
+        bucket: env.feedback_gitops_audio,
+        ai: env.AI,
       },
     };
 

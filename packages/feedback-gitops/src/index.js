@@ -8,6 +8,10 @@ class ActionError extends Error {
         this.name = "ActionError";
     }
 }
+function getServiceName(request) {
+    const hostname = new URL(request.url).hostname;
+    return hostname.split(".")[0] || "feedback-gitops";
+}
 function json(data, init = {}) {
     const headers = new Headers(init.headers);
     headers.set("Content-Type", "application/json; charset=utf-8");
@@ -25,26 +29,79 @@ function getErrorMessage(error, fallback) {
         return error;
     return fallback;
 }
-function isFeedbackSubmission(value) {
-    if (!value || typeof value !== "object")
-        return false;
-    const item = value;
-    return typeof item.title === "string" && item.title.trim().length > 0;
-}
 function normalizeSubmission(value) {
     if (!value || typeof value !== "object")
         return null;
     const item = value;
-    if (typeof item.title !== "string" || item.title.trim().length === 0)
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    if (!title)
         return null;
     const labels = Array.isArray(item.labels) ? item.labels.filter((label) => typeof label === "string") : undefined;
     return {
-        title: item.title,
-        description: typeof item.description === "string" ? item.description : "",
+        input: {
+            type: "text",
+            title,
+            description: typeof item.description === "string" ? item.description : "",
+        },
         url: typeof item.url === "string" ? item.url : undefined,
         userAgent: typeof item.userAgent === "string" ? item.userAgent : undefined,
         labels,
         mergePolicy: item.mergePolicy === 'auto_unblocked' ? 'auto_unblocked' : undefined,
+    };
+}
+function parseLabelsField(raw) {
+    if (typeof raw !== "string" || !raw.trim())
+        return undefined;
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            const labels = parsed.filter((item) => typeof item === "string" && item.trim().length > 0);
+            return labels.length ? labels : undefined;
+        }
+    }
+    catch {
+        // Fall back to comma-separated labels.
+    }
+    const labels = raw.split(",").map((item) => item.trim()).filter(Boolean);
+    return labels.length ? labels : undefined;
+}
+function getAudioExtension(mimeType) {
+    if (mimeType.includes("webm"))
+        return "webm";
+    if (mimeType.includes("mp4") || mimeType.includes("m4a"))
+        return "m4a";
+    if (mimeType.includes("mpeg"))
+        return "mp3";
+    if (mimeType.includes("wav"))
+        return "wav";
+    return "bin";
+}
+async function normalizeAudioSubmission(request, env) {
+    const formData = await request.formData();
+    const audioValue = formData.get("audio");
+    if (!(audioValue instanceof File))
+        return null;
+    if (audioValue.size < 1)
+        return null;
+    const mimeType = String(formData.get("mimeType") || audioValue.type || "audio/webm");
+    const durationMsRaw = Number(formData.get("durationMs"));
+    const durationMs = Number.isFinite(durationMsRaw) && durationMsRaw > 0 ? Math.round(durationMsRaw) : undefined;
+    const extension = getAudioExtension(mimeType);
+    const audioKey = `audio-requests/${crypto.randomUUID()}.${extension}`;
+    await env.feedback_gitops_audio.put(audioKey, await audioValue.arrayBuffer(), {
+        httpMetadata: { contentType: mimeType },
+    });
+    return {
+        input: {
+            type: "audio",
+            audioKey,
+            mimeType,
+            durationMs,
+        },
+        url: typeof formData.get("url") === "string" ? String(formData.get("url")) : undefined,
+        userAgent: typeof formData.get("userAgent") === "string" ? String(formData.get("userAgent")) : undefined,
+        labels: parseLabelsField(formData.get("labels")),
+        mergePolicy: formData.get("mergePolicy") === "auto_unblocked" ? "auto_unblocked" : undefined,
     };
 }
 function getCorsHeaders(request) {
@@ -57,6 +114,14 @@ function getCorsHeaders(request) {
 }
 function getAdminTokenFromRequest(request) {
     return request.headers.get("X-Admin-Token") || "";
+}
+function isAuthorizedRequest(request, env) {
+    const adminToken = getAdminTokenFromRequest(request);
+    if (env.ADMIN_TOKEN && adminToken) {
+        return adminToken === env.ADMIN_TOKEN;
+    }
+    const apiKey = request.headers.get("X-API-Key");
+    return apiKey === env.API_KEY;
 }
 async function githubRequest(env, path, init = {}) {
     const url = `https://api.github.com/repos/${env.GITHUB_REPO_OWNER}/${env.GITHUB_REPO_NAME}${path}`;
@@ -896,27 +961,25 @@ export default {
             });
         }
         if (request.method === "GET" && url.pathname === "/health") {
-            return json({ ok: true, service: "feedback-gitops-thoughts" }, { headers: corsHeaders });
+            return json({ ok: true, service: getServiceName(request) }, { headers: corsHeaders });
         }
         if (request.method === "POST" && url.pathname === "/api/issue") {
-            const apiKey = request.headers.get("X-API-Key");
-            if (apiKey !== env.API_KEY) {
+            if (!isAuthorizedRequest(request, env)) {
                 return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
             }
-            if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-                return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-            }
-            let payload;
+            let submission = null;
             try {
-                payload = await request.json();
+                const contentType = (request.headers.get("content-type") || "").toLowerCase();
+                if (contentType.includes("multipart/form-data")) {
+                    submission = await normalizeAudioSubmission(request, env);
+                }
+                else {
+                    submission = normalizeSubmission(await request.json());
+                }
             }
             catch {
-                return json(errorPayload("Invalid JSON body", "INVALID_JSON"), { status: 400, headers: corsHeaders });
+                return json(errorPayload("Invalid request body", "INVALID_JSON"), { status: 400, headers: corsHeaders });
             }
-            if (!isFeedbackSubmission(payload)) {
-                return json(errorPayload("Invalid submission payload", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
-            }
-            const submission = normalizeSubmission(payload);
             if (!submission) {
                 return json(errorPayload("Invalid submission payload", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
             }
@@ -930,12 +993,8 @@ export default {
             return json({ success: true }, { headers: corsHeaders });
         }
         if (request.method === "GET" && url.pathname === "/api/issues") {
-            const apiKey = request.headers.get("X-API-Key");
-            if (apiKey !== env.API_KEY) {
+            if (!isAuthorizedRequest(request, env)) {
                 return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-            }
-            if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-                return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
             }
             const limit = Number(url.searchParams.get("limit") || "20");
             const statusParam = String(url.searchParams.get("status") || "");
@@ -964,12 +1023,8 @@ export default {
             }
         }
         if (request.method === "POST" && url.pathname === "/api/action") {
-            const apiKey = request.headers.get("X-API-Key");
-            if (apiKey !== env.API_KEY) {
+            if (!isAuthorizedRequest(request, env)) {
                 return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-            }
-            if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-                return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
             }
             let body;
             try {
@@ -1003,12 +1058,8 @@ export default {
             }
         }
         if (request.method === "POST" && url.pathname === "/api/reconcile-merge-requests") {
-            const apiKey = request.headers.get("X-API-Key");
-            if (apiKey !== env.API_KEY) {
+            if (!isAuthorizedRequest(request, env)) {
                 return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
-            }
-            if (env.ADMIN_TOKEN && getAdminTokenFromRequest(request) !== env.ADMIN_TOKEN) {
-                return json(errorPayload("Invalid admin token", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
             }
             try {
                 const result = await reconcileMergeRequestedIssues(env);
@@ -1030,6 +1081,10 @@ export default {
                 repo: env.GITHUB_REPO_NAME,
                 labels: [],
                 baseBranch: env.GITHUB_BASE_BRANCH || "main",
+            },
+            audio: {
+                bucket: env.feedback_gitops_audio,
+                ai: env.AI,
             },
         };
         const consumer = createIssueConsumer(config);

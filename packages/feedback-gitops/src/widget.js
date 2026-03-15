@@ -445,15 +445,16 @@ ${inlineRecorderSource}
     if (timer) timer.textContent = formatDuration(state.voiceDraftDurationMs);
     if (hint) {
       hint.textContent = state.voiceDraftReady
-        ? 'Audio draft is kept locally for now. Send wiring comes next.'
+        ? 'Recording is ready to send.'
         : 'Tap Record to start a draft. Settings contains merge policy.';
     }
     if (recordBtn) {
       recordBtn.textContent = state.voiceDraftState === 'recording' ? 'Pause' : 'Record';
       recordBtn.className = state.voiceDraftState === 'recording' ? 'cfw-btn cfw-btn-primary' : 'cfw-btn cfw-btn-outline';
+      recordBtn.disabled = state.creating;
     }
-    if (resetBtn) resetBtn.disabled = !state.voiceDraftReady && state.voiceDraftState === 'idle';
-    if (sendBtn) sendBtn.disabled = state.voiceDraftState === 'recording' || !state.voiceDraftReady;
+    if (resetBtn) resetBtn.disabled = state.creating || (!state.voiceDraftReady && state.voiceDraftState === 'idle');
+    if (sendBtn) sendBtn.disabled = state.creating || state.voiceDraftState === 'recording' || !state.voiceDraftReady;
   }
 
   async function toggleVoiceRecording() {
@@ -501,9 +502,34 @@ ${inlineRecorderSource}
         setCreateError('No recorded audio available yet.');
         return;
       }
-      setCreateError('Voice upload is not wired yet. Recorder module is now live and captured ' + Math.ceil(blob.size / 1024) + ' KB.');
+      const token = requireAdminToken();
+      if (!token) return;
+
+      setCreateError('');
+      setCreateLoading(true);
+      const formData = new FormData();
+      formData.append('audio', blob, 'voice-request.webm');
+      formData.append('mimeType', blob.type || 'audio/webm');
+      formData.append('durationMs', String(state.voiceDraftDurationMs || 0));
+      formData.append('url', window.location.href);
+      formData.append('userAgent', navigator.userAgent);
+      formData.append('mergePolicy', state.draftMergePolicy || 'manual');
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'x-admin-token': token,
+        },
+        body: formData,
+      });
+      await readApiPayload(response, 'Failed to create voice request');
+      await resetVoiceDraft();
+      showToast('Voice request queued.', '');
+      await loadIssues(true);
+      setTab('requests');
     } catch (err) {
       setCreateError((err && err.message) ? err.message : 'Failed to prepare recording');
+    } finally {
+      setCreateLoading(false);
     }
   }
 
@@ -627,6 +653,7 @@ ${inlineRecorderSource}
     if (a) a.disabled = loading;
     if (b) b.disabled = loading;
     if (b) b.textContent = loading ? 'Saving...' : 'Create & Execute';
+    updateVoiceComposer();
   }
 
   function setIssuesLoading(loading) {

@@ -85,6 +85,8 @@ function usage() {
     [--target-cwd <target-worker-directory>] \\
     [--worker-url <feedback-worker-url>] \\
     [--queue <queue-name>] \\
+    [--audio-bucket <bucket-name>] \\
+    [--github-pat <token>] \\
     [--base-branch <branch>]
 
 Required keys in env file:
@@ -101,6 +103,8 @@ Example:
     --target-cwd /home/andrey/src/thoughts/packages/server \\
     --worker-url https://feedback-gitops-thoughts.andrei-kokoev.workers.dev \\
     --queue feedback-queue-thoughts \\
+    --audio-bucket feedback-gitops-thoughts-audio \\
+    --github-pat ghp_... \\
     --base-branch main
 `);
 }
@@ -138,11 +142,33 @@ function runAllowingQueueExists(queueName) {
   throw new Error(`Failed to create queue '${queueName}'`);
 }
 
-function buildConfig(workerName, queueName) {
+function runAllowingBucketExists(bucketName) {
+  const result = spawnSync("npx", ["wrangler", "r2", "bucket", "create", bucketName], {
+    cwd: workerPackageDir,
+    encoding: "utf8",
+    env: process.env,
+  });
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`.toLowerCase();
+  if (result.status === 0) {
+    process.stdout.write(result.stdout || "");
+    process.stderr.write(result.stderr || "");
+    return;
+  }
+  if (output.includes("already exists") || output.includes("already owned by you")) {
+    console.log(`[provision] Bucket '${bucketName}' already exists. Reusing.`);
+    return;
+  }
+  process.stdout.write(result.stdout || "");
+  process.stderr.write(result.stderr || "");
+  throw new Error(`Failed to create bucket '${bucketName}'`);
+}
+
+function buildConfig(workerName, queueName, bucketName) {
   const template = readFileSync(templateConfigPath, "utf8");
   return template
     .replace(/^name\s*=\s*".*"$/m, `name = "${workerName}"`)
     .replace(/^main\s*=\s*".*"$/m, `main = "../src/index.ts"`)
+    .replace(/(\[\[r2_buckets\]\][\s\S]*?bucket_name\s*=\s*)".*"/m, `$1"${bucketName}"`)
     .replace(/(\[\[queues\.producers\]\][\s\S]*?queue\s*=\s*)".*"/m, `$1"${queueName}"`)
     .replace(/(\[\[queues\.consumers\]\][\s\S]*?queue\s*=\s*)".*"/m, `$1"${queueName}"`);
 }
@@ -165,6 +191,7 @@ function main() {
   const repoSpec = String(args.repo).trim();
   const envFile = path.resolve(String(args["env-file"]).trim());
   const queueName = args.queue ? String(args.queue).trim() : `${workerName}-queue`;
+  const bucketName = args["audio-bucket"] ? String(args["audio-bucket"]).trim() : `${workerName}-audio`;
   const baseBranch = args["base-branch"] ? String(args["base-branch"]).trim() : "main";
   const targetWorkerName = args["target-worker"] ? String(args["target-worker"]).trim() : "";
   const targetWorkerCwd = args["target-cwd"] ? path.resolve(String(args["target-cwd"]).trim()) : "";
@@ -181,7 +208,7 @@ function main() {
   ensureEnvKeys(envFile, env);
   const apiKey = env.AGENT_CHANGE_REQUEST_API_KEY || env.API_KEY;
   const adminToken = env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN || env.ADMIN_TOKEN;
-  const githubPat = env.GITHUB_PAT;
+  const githubPat = args["github-pat"] ? String(args["github-pat"]).trim() : env.GITHUB_PAT;
   if (!apiKey || !adminToken || !githubPat) {
     throw new Error("Missing required secret in env file: GITHUB_PAT (agent keys are auto-generated if absent)");
   }
@@ -190,10 +217,12 @@ function main() {
   const configPath = path.join(tmpDir, "wrangler.toml");
 
   try {
-    writeFileSync(configPath, buildConfig(workerName, queueName), "utf8");
+    writeFileSync(configPath, buildConfig(workerName, queueName, bucketName), "utf8");
 
     console.log(`[provision] Queue: ${queueName}`);
     runAllowingQueueExists(queueName);
+    console.log(`[provision] Audio bucket: ${bucketName}`);
+    runAllowingBucketExists(bucketName);
 
     const secrets = {
       API_KEY: apiKey,
@@ -241,6 +270,7 @@ function main() {
     console.log("Provisioning complete.");
     console.log(`Worker: ${workerName}`);
     console.log(`Queue: ${queueName}`);
+    console.log(`Audio bucket: ${bucketName}`);
     console.log(`URL: https://${workerName}.<your-workers-subdomain>.workers.dev`);
     console.log("");
     console.log("Target repo wiring:");

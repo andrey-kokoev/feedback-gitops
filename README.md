@@ -25,6 +25,7 @@ pnpm run provision:instance -- \
   --repo andrey-kokoev/thoughts \
   --env-file /home/andrey/src/thoughts/.env.local \
   --queue feedback-queue-thoughts \
+  --audio-bucket feedback-gitops-thoughts-audio \
   --base-branch main
 ```
 
