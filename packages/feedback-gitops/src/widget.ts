@@ -33,10 +33,15 @@ ${inlineRecorderSource}
       actionEndpoint: ds.actionEndpoint || inferEndpoint('/api/action'),
       repo: ds.repo || '${defaultRepo}',
       labels: ds.labels || '${defaultLabelsStr}',
+      handedness: ds.handedness === 'left' ? 'left' : 'right',
     };
   }
 
   const config = getBootstrapConfig();
+
+  function isMobile() {
+    try { return window.matchMedia('(max-width: 680px)').matches; } catch { return false; }
+  }
 
   function getStateStorageKey() {
     return STATE_STORAGE_KEY;
@@ -81,6 +86,10 @@ ${inlineRecorderSource}
     toastText: '',
     toastLink: '',
     toastTimer: null,
+    textCreateSuccess: false,
+    voiceCreateSuccess: false,
+    mobileSheetIssueNumber: null,
+    handedness: 'right',
   };
 
   function parseLabels() {
@@ -190,7 +199,9 @@ ${inlineRecorderSource}
       const saved = JSON.parse(raw);
       if (!saved || typeof saved !== 'object') return;
 
-      if (saved.activeTab === 'new' || saved.activeTab === 'requests') state.activeTab = saved.activeTab;
+      if (['new', 'requests', 'text', 'voice', 'list', 'settings'].includes(saved.activeTab)) state.activeTab = saved.activeTab;
+      if (saved.activeTab === 'voice') state.captureMode = 'voice';
+      if (saved.activeTab === 'text') state.captureMode = 'text';
       if (saved.captureMode === 'text' || saved.captureMode === 'voice') state.captureMode = saved.captureMode;
       if (Array.isArray(saved.issues)) state.issues = saved.issues;
       state.issuesLoaded = Boolean(saved.issuesLoaded);
@@ -211,6 +222,7 @@ ${inlineRecorderSource}
 
       if (typeof saved.toastText === 'string') state.toastText = saved.toastText;
       if (typeof saved.toastLink === 'string') state.toastLink = saved.toastLink;
+      if (saved.handedness === 'left' || saved.handedness === 'right') state.handedness = saved.handedness;
     } catch {
       // no-op
     }
@@ -235,6 +247,7 @@ ${inlineRecorderSource}
         executeError: state.executeError,
         toastText: state.toastText,
         toastLink: state.toastLink,
+        handedness: state.handedness,
       };
       localStorage.setItem(getStateStorageKey(), JSON.stringify(snapshot));
     } catch {
@@ -394,13 +407,101 @@ ${inlineRecorderSource}
 #cfw-toast { position: fixed; top: 14px; right: 14px; z-index: 10002; max-width: min(420px, calc(100vw - 28px)); border: 1px solid rgba(124, 187, 255, 0.4); border-radius: 10px; background: rgba(10, 17, 29, 0.96); box-shadow: 0 12px 28px rgba(2, 7, 14, 0.5); padding: 10px 12px; font-size: 12px; color: #d9e7f7; display: none; backdrop-filter: blur(8px); }
 #cfw-toast.active { display: block; }
 #cfw-toast a { color: #9ad2ff; text-decoration: underline; text-underline-offset: 2px; }
+#cfw-mobile { display: none; position: fixed; inset: 0; z-index: 9999; flex-direction: column; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
+#cfw-mobile-launcher { display: none; }
+#cfw-swipe-hint { display: none; }
 @media (max-width: 680px) {
-  #cfw-feedback-widget { right: 0; bottom: 10px; }
-  #cfw-feedback-panel { top: 10px; right: 10px; width: calc(100vw - 20px); height: calc(100vh - 20px); }
-  .cfw-voice-controls { grid-template-columns: 1fr; }
-  #cfw-requests-controls-top { grid-template-columns: 1fr; }
-  #cfw-issues-table-wrap { display: none; }
-  #cfw-issues-cards { display: grid; }
+  #cfw-feedback-launcher, #cfw-feedback-panel, #cfw-feedback-overlay { display: none !important; }
+  #cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
+  #cfw-mobile-launcher svg { width: 14px; height: 14px; }
+  #cfw-mobile-body { flex: 1; overflow: hidden; position: relative; }
+  .cfw-mv { position: absolute; inset: 0; display: none; flex-direction: column; overflow: hidden; }
+  .cfw-mv.active { display: flex; }
+  #cfw-mobile-nav { height: 56px; display: flex; border-top: 1px solid rgba(124,187,255,0.18); background: rgba(10,17,29,0.98); flex-shrink: 0; }
+  .cfw-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: #7f9cbc; cursor: pointer; font-size: 10px; padding: 0; -webkit-tap-highlight-color: transparent; }
+  .cfw-nav-btn.active { color: #9ad2ff; }
+  .cfw-nav-btn svg { width: 20px; height: 20px; }
+  #cfw-ml-head { padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(124,187,255,0.18); flex-shrink: 0; }
+  #cfw-ml-head-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7cc4ff; font-weight: 600; }
+  #cfw-ml-head-actions { display: flex; gap: 8px; }
+  #cfw-ml-head-actions button { height: 30px; padding: 0 10px; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #9bb7d3; font-size: 12px; cursor: pointer; }
+  #cfw-ml-head-actions button:disabled { opacity: 0.5; }
+  #cfw-ml-body { flex: 1; overflow-y: auto; }
+  .cfw-ml-empty { padding: 32px 14px; font-size: 13px; color: #7f9cbc; text-align: center; line-height: 1.6; }
+  .cfw-ml-row { padding: 12px 14px; border-bottom: 1px solid #1a2d42; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; -webkit-tap-highlight-color: transparent; }
+  .cfw-ml-row:active { background: rgba(124,187,255,0.06); }
+  .cfw-ml-row-left { flex: 1; min-width: 0; }
+  .cfw-ml-row-num { font-size: 11px; color: #7f9cbc; margin-bottom: 2px; }
+  .cfw-ml-row-title { font-size: 13px; color: #d9e7f7; margin-bottom: 4px; word-break: break-word; }
+  .cfw-ml-row-meta { font-size: 11px; color: #7f9cbc; }
+  .cfw-ml-row-status { font-size: 11px; color: #9bb7d3; white-space: nowrap; text-align: right; padding-top: 2px; }
+  #cfw-ml-error { margin: 8px 14px 0; }
+  #cfw-mbs-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.6); z-index: 10001; display: none; }
+  #cfw-mbs-overlay.active { display: block; }
+  #cfw-mbs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10002; background: #0d1727; border-top: 1px solid rgba(124,187,255,0.28); border-radius: 16px 16px 0 0; padding: 0 14px 36px; max-height: 82vh; overflow-y: auto; transform: translateY(100%); transition: transform .25s ease; }
+  #cfw-mbs.active { transform: translateY(0); }
+  #cfw-mbs-handle { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; margin: 12px auto 16px; }
+  .cfw-mf { flex: 1; display: flex; flex-direction: column; padding: 14px; overflow: hidden; }
+  .cfw-mf input, .cfw-mf textarea, .cfw-mf select { width: 100%; border: 1px solid #2f4864; border-radius: 8px; background: #0d1727; color: #e2f0ff; box-sizing: border-box; font-family: inherit; }
+  .cfw-mf input { height: 44px; padding: 0 14px; margin-bottom: 10px; font-size: 15px; flex-shrink: 0; }
+  .cfw-mf textarea { flex: 1; padding: 12px 14px; font-size: 15px; resize: none; overflow-y: auto; margin-bottom: 10px; min-height: 0; }
+  .cfw-mf input::placeholder, .cfw-mf textarea::placeholder { color: #7f9cbc; }
+  .cfw-mf input:focus, .cfw-mf textarea:focus { outline: none; border-color: #4f7298; }
+  .cfw-mf-policy { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; flex-shrink: 0; }
+  .cfw-mf-policy label { font-size: 12px; color: #9bb7d3; }
+  .cfw-mf-policy .cfw-m-hand-toggle .cfw-m-hand-btn { height: 36px; font-size: 13px; }
+  .cfw-mf-error { font-size: 13px; color: #ff9a9a; display: none; margin-bottom: 8px; flex-shrink: 0; }
+  .cfw-mf-error.active { display: block; }
+  .cfw-mf-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .cfw-mf-actions button { flex: 1; height: 48px; border-radius: 8px; border: 1px solid; font-size: 14px; cursor: pointer; }
+  .cfw-m-success { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .cfw-m-success-ring { width: 80px; height: 80px; border-radius: 50%; background: rgba(74,222,128,0.12); border: 2px solid rgba(74,222,128,0.35); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+  .cfw-m-success-ring svg { width: 44px; height: 44px; color: #4ade80; }
+  .cfw-m-success-hint { font-size: 13px; color: #7f9cbc; }
+  .cfw-m-voice { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px; gap: 14px; overflow: hidden; }
+  .cfw-m-vstatus { border: 1px solid #2f4864; border-radius: 12px; padding: 16px; background: rgba(11,24,40,0.65); flex-shrink: 0; }
+  .cfw-m-vstatus-line { font-size: 15px; color: #d9e7f7; margin-bottom: 8px; }
+  .cfw-m-vmeta { display: flex; justify-content: space-between; font-size: 13px; color: #9bb7d3; }
+  .cfw-m-vcontrols { display: flex; gap: 10px; flex-shrink: 0; }
+  .cfw-m-vcontrols button { flex: 1; height: 52px; border-radius: 10px; border: 1px solid; font-size: 15px; cursor: pointer; }
+  .cfw-m-vhint { font-size: 12px; color: #7f9cbc; flex-shrink: 0; }
+  .cfw-m-verror { font-size: 13px; color: #ff9a9a; display: none; flex-shrink: 0; }
+  .cfw-m-verror.active { display: block; }
+  .cfw-m-settings { padding: 20px 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .cfw-m-settings h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7cc4ff; font-weight: 600; }
+  .cfw-m-settings-btn { height: 48px; border-radius: 8px; border: 1px solid rgba(124,187,255,0.3); background: #0d1727; color: #d9e7f7; font-size: 14px; cursor: pointer; width: 100%; }
+  .cfw-m-settings-btn:active { background: #0f1c2f; }
+  .cfw-m-settings-note { font-size: 12px; color: #7f9cbc; margin: 0; }
+  .cfw-m-settings-token { font-size: 12px; color: #9bb7d3; }
+  .cfw-m-settings select { width: 100%; height: 44px; border: 1px solid #2f4864; border-radius: 8px; background: #0d1727; color: #e2f0ff; padding: 0 12px; font-size: 14px; font-family: inherit; }
+  .cfw-m-hand-toggle { display: flex; gap: 8px; }
+  .cfw-m-hand-btn { flex: 1; height: 44px; border-radius: 8px; border: 1px solid rgba(124,187,255,0.3); background: #0d1727; color: #9bb7d3; font-size: 14px; cursor: pointer; }
+  .cfw-m-hand-btn.active { border-color: #9ad2ff; background: #0f2035; color: #9ad2ff; font-weight: 600; }
+  #cfw-swipe-hint { display: block; position: fixed; bottom: 62px; font-size: 11px; color: #9ad2ff; background: rgba(10,17,29,0.92); border: 1px solid rgba(124,187,255,0.3); border-radius: 6px; padding: 4px 8px; pointer-events: none; opacity: 0; transition: opacity 0.4s; white-space: nowrap; z-index: 9999; }
+  #cfw-swipe-hint.visible { opacity: 1; }
+  .cfw-fs-section { margin-bottom: 18px; }
+  .cfw-fs-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7cc4ff; margin-bottom: 8px; }
+  .cfw-fs-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cfw-fs-pill { border: 1px solid #2f4864; border-radius: 999px; background: #0d1727; color: #9bb7d3; height: 32px; padding: 0 14px; font-size: 12px; cursor: pointer; }
+  .cfw-fs-pill.active { border-color: rgba(124,187,255,0.55); color: #d9e7f7; background: #0f1c2f; }
+  .cfw-fs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cfw-fs-chip { border: 1px solid #2f4864; border-radius: 999px; background: #0d1727; color: #9bb7d3; height: 28px; padding: 0 10px; font-size: 11px; cursor: pointer; }
+  .cfw-fs-chip.active { border-color: rgba(124,187,255,0.55); color: #d9e7f7; background: #0f1c2f; }
+  .cfw-is-num { font-size: 12px; color: #7f9cbc; margin-bottom: 4px; }
+  .cfw-is-title { font-size: 16px; color: #d9e7f7; margin-bottom: 10px; word-break: break-word; text-decoration: none; display: block; line-height: 1.4; }
+  .cfw-is-title:hover { color: #9ad2ff; }
+  .cfw-is-status { font-size: 13px; color: #9bb7d3; margin-bottom: 14px; }
+  .cfw-is-section { margin-bottom: 16px; }
+  .cfw-is-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #7cc4ff; margin-bottom: 8px; }
+  .cfw-is-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .cfw-is-actions { display: flex; flex-direction: column; gap: 8px; }
+  .cfw-is-action-btn { width: 100%; height: 48px; border-radius: 8px; border: 1px solid rgba(124,187,255,0.4); background: #0d1727; color: #d9e7f7; font-size: 14px; cursor: pointer; text-align: left; padding: 0 14px; }
+  .cfw-is-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cfw-is-action-reason { font-size: 11px; color: #7f9cbc; font-style: italic; display: block; padding: 0 2px; }
+  .cfw-is-pr-link { color: #9ad2ff; text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+  .cfw-is-error { font-size: 13px; color: #ff9a9a; display: none; margin-bottom: 10px; }
+  .cfw-is-error.active { display: block; }
+  .cfw-mbs-close { width: 100%; height: 48px; border-radius: 8px; border: 1px solid #2f4864; background: transparent; color: #9bb7d3; font-size: 14px; cursor: pointer; margin-top: 8px; }
 }\`;
     return style;
   }
@@ -432,31 +533,34 @@ ${inlineRecorderSource}
   }
 
   function updateVoiceComposer() {
-    const statusLine = document.getElementById('cfw-voice-status-line');
-    const timer = document.getElementById('cfw-voice-timer');
-    const hint = document.getElementById('cfw-voice-hint');
-    const recordBtn = document.getElementById('cfw-voice-record');
-    const resetBtn = document.getElementById('cfw-voice-reset');
-    const sendBtn = document.getElementById('cfw-voice-send');
-
-    if (statusLine) {
-      if (state.voiceDraftState === 'recording') statusLine.textContent = 'Recording in progress';
-      else if (state.voiceDraftState === 'paused' && state.voiceDraftReady) statusLine.textContent = 'Recording paused';
-      else statusLine.textContent = 'Ready to record';
+    function applyVoiceUi(statusLineId, timerId, hintId, recordBtnId, resetBtnId, sendBtnId) {
+      const statusLine = document.getElementById(statusLineId);
+      const timer = document.getElementById(timerId);
+      const hint = document.getElementById(hintId);
+      const recordBtn = document.getElementById(recordBtnId);
+      const resetBtn = document.getElementById(resetBtnId);
+      const sendBtn = document.getElementById(sendBtnId);
+      if (statusLine) {
+        if (state.voiceDraftState === 'recording') statusLine.textContent = 'Recording in progress';
+        else if (state.voiceDraftState === 'paused' && state.voiceDraftReady) statusLine.textContent = 'Recording paused';
+        else statusLine.textContent = 'Ready to record';
+      }
+      if (timer) timer.textContent = formatDuration(state.voiceDraftDurationMs);
+      if (hint) {
+        hint.textContent = state.voiceDraftReady
+          ? 'Recording is ready to send.'
+          : 'Tap Record to start a draft. Settings ⚙ contains merge policy.';
+      }
+      if (recordBtn) {
+        recordBtn.textContent = state.voiceDraftState === 'recording' ? 'Pause' : 'Record';
+        recordBtn.className = state.voiceDraftState === 'recording' ? 'cfw-btn cfw-btn-primary' : 'cfw-btn cfw-btn-outline';
+        recordBtn.disabled = state.creating;
+      }
+      if (resetBtn) resetBtn.disabled = state.creating || (!state.voiceDraftReady && state.voiceDraftState === 'idle');
+      if (sendBtn) sendBtn.disabled = state.creating || state.voiceDraftState === 'recording' || !state.voiceDraftReady;
     }
-    if (timer) timer.textContent = formatDuration(state.voiceDraftDurationMs);
-    if (hint) {
-      hint.textContent = state.voiceDraftReady
-        ? 'Recording is ready to send.'
-        : 'Tap Record to start a draft. Settings contains merge policy.';
-    }
-    if (recordBtn) {
-      recordBtn.textContent = state.voiceDraftState === 'recording' ? 'Pause' : 'Record';
-      recordBtn.className = state.voiceDraftState === 'recording' ? 'cfw-btn cfw-btn-primary' : 'cfw-btn cfw-btn-outline';
-      recordBtn.disabled = state.creating;
-    }
-    if (resetBtn) resetBtn.disabled = state.creating || (!state.voiceDraftReady && state.voiceDraftState === 'idle');
-    if (sendBtn) sendBtn.disabled = state.creating || state.voiceDraftState === 'recording' || !state.voiceDraftReady;
+    applyVoiceUi('cfw-voice-status-line', 'cfw-voice-timer', 'cfw-voice-hint', 'cfw-voice-record', 'cfw-voice-reset', 'cfw-voice-send');
+    applyVoiceUi('cfw-mv-vstatus-line', 'cfw-mv-vtimer', 'cfw-mv-vhint', 'cfw-mv-vrecord', 'cfw-mv-vreset', 'cfw-mv-vsend');
   }
 
   async function toggleVoiceRecording() {
@@ -525,11 +629,19 @@ ${inlineRecorderSource}
       });
       await readApiPayload(response, 'Failed to create voice request');
       await resetVoiceDraft();
-      showToast('Voice request queued.', '');
-      await loadIssues(true);
-      setTab('requests');
+      if (isMobile()) {
+        setVoiceCreateSuccess(true);
+        void loadIssues(true);
+      } else {
+        showToast('Voice request queued.', '');
+        await loadIssues(true);
+        setTab('requests');
+      }
     } catch (err) {
-      setCreateError((err && err.message) ? err.message : 'Failed to prepare recording');
+      const msg = (err && err.message) ? err.message : 'Failed to prepare recording';
+      setCreateError(msg);
+      const mve = document.getElementById('cfw-mv-verror');
+      if (mve) { mve.textContent = msg; mve.classList.add('active'); }
     } finally {
       setCreateLoading(false);
     }
@@ -559,19 +671,17 @@ ${inlineRecorderSource}
 
   function setCreateError(message) {
     state.createError = message || '';
-    const el = document.getElementById('cfw-new-error');
-    if (!el) {
-      persistState();
-      return;
-    }
-    if (!state.createError) {
-      el.classList.remove('active');
-      el.textContent = '';
-      persistState();
-      return;
-    }
-    el.textContent = state.createError;
-    el.classList.add('active');
+    ['cfw-new-error', 'cfw-m-error'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!state.createError) {
+        el.classList.remove('active');
+        el.textContent = '';
+      } else {
+        el.textContent = state.createError;
+        el.classList.add('active');
+      }
+    });
     persistState();
   }
 
@@ -655,15 +765,20 @@ ${inlineRecorderSource}
     if (a) a.disabled = loading;
     if (b) b.disabled = loading;
     if (b) b.textContent = loading ? 'Saving...' : 'Create & Execute';
+    const ma = document.getElementById('cfw-m-create-only');
+    const mb = document.getElementById('cfw-m-create-execute');
+    if (ma) ma.disabled = loading;
+    if (mb) mb.disabled = loading;
+    if (mb) mb.textContent = loading ? 'Saving...' : 'Create & Execute';
     updateVoiceComposer();
   }
 
   function setIssuesLoading(loading) {
     state.loadingIssues = loading;
     const btn = document.getElementById('cfw-refresh-issues');
-    if (!btn) return;
-    btn.disabled = loading;
-    btn.textContent = loading ? 'Loading...' : 'Refresh';
+    if (btn) { btn.disabled = loading; btn.textContent = loading ? 'Loading...' : 'Refresh'; }
+    const mbtn = document.getElementById('cfw-ml-refresh-btn');
+    if (mbtn) { mbtn.disabled = loading; mbtn.textContent = loading ? '…' : '↻'; }
   }
 
   function closeTokenMenu() {
@@ -1049,6 +1164,7 @@ ${inlineRecorderSource}
     });
 
     persistState();
+    renderMobileIssues();
   }
 
   function getIssueUrlFromCreateResponse(data) {
@@ -1124,15 +1240,24 @@ ${inlineRecorderSource}
       state.draftDescription = '';
       if (titleEl) titleEl.value = '';
       if (descriptionEl) descriptionEl.value = '';
+      const mTitle = document.getElementById('cfw-m-title');
+      const mDesc = document.getElementById('cfw-m-description');
+      if (mTitle) mTitle.value = '';
+      if (mDesc) mDesc.value = '';
 
-      showToast(execute ? 'Request queued for execution.' : 'Request queued.', issueUrl);
-      await loadIssues(true);
-      setTab('requests');
-      if (!issueUrl) {
-        void waitForCreatedIssueUrl(title).then((resolvedUrl) => {
-          if (!resolvedUrl) return;
-          showToast(execute ? 'Request queued for execution.' : 'Request queued.', resolvedUrl);
-        });
+      if (isMobile()) {
+        setTextCreateSuccess(true);
+        void loadIssues(true);
+      } else {
+        showToast(execute ? 'Request queued for execution.' : 'Request queued.', issueUrl);
+        await loadIssues(true);
+        setTab('requests');
+        if (!issueUrl) {
+          void waitForCreatedIssueUrl(title).then((resolvedUrl) => {
+            if (!resolvedUrl) return;
+            showToast(execute ? 'Request queued for execution.' : 'Request queued.', resolvedUrl);
+          });
+        }
       }
       persistState();
     } catch (err) {
@@ -1210,7 +1335,6 @@ ${inlineRecorderSource}
     launcher.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 112.97 2.971L8.35 17.94 4 19l1.06-4.35L16.862 3.487z" /></svg>';
     launcher.onclick = openPanel;
 
-    root.appendChild(createStyles());
     root.appendChild(launcher);
 
     const overlay = document.createElement('div');
@@ -1512,13 +1636,652 @@ ${inlineRecorderSource}
     }
   }
 
+  // ── Mobile-only functions ──────────────────────────────────────────────────
+
+  function setTextCreateSuccess(val) {
+    state.textCreateSuccess = Boolean(val);
+    const form = document.getElementById('cfw-mv-text-form');
+    const success = document.getElementById('cfw-mv-text-success');
+    if (form) form.style.display = val ? 'none' : '';
+    if (success) success.style.display = val ? '' : 'none';
+  }
+
+  function setVoiceCreateSuccess(val) {
+    state.voiceCreateSuccess = Boolean(val);
+    const form = document.getElementById('cfw-mv-voice-form');
+    const success = document.getElementById('cfw-mv-voice-success');
+    if (form) form.style.display = val ? 'none' : '';
+    if (success) success.style.display = val ? '' : 'none';
+  }
+
+  function renderMobileIssues() {
+    const body = document.getElementById('cfw-ml-body');
+    if (!body) return;
+    body.innerHTML = '';
+    const token = readAdminToken();
+    if (!state.issues.length) {
+      const empty = document.createElement('div');
+      empty.className = 'cfw-ml-empty';
+      empty.textContent = !token
+        ? 'Enter admin token in Settings ⚙ to view requests.'
+        : state.loadingIssues ? 'Loading…' : 'No requests yet.';
+      body.appendChild(empty);
+      return;
+    }
+    state.issues.forEach((issue) => {
+      const row = document.createElement('div');
+      row.className = 'cfw-ml-row';
+      const left = document.createElement('div');
+      left.className = 'cfw-ml-row-left';
+      const num = document.createElement('div');
+      num.className = 'cfw-ml-row-num';
+      num.textContent = '#' + issue.number;
+      const title = document.createElement('div');
+      title.className = 'cfw-ml-row-title';
+      title.textContent = issue.title;
+      const meta = document.createElement('div');
+      meta.className = 'cfw-ml-row-meta';
+      if (issue.pullRequest && issue.pullRequest.url) {
+        meta.textContent = 'PR #' + issue.pullRequest.number + ' · ' + String(issue.pullRequest.state || '').toLowerCase();
+      } else {
+        const labels = Array.isArray(issue.labels) ? issue.labels.filter((l) => !l.startsWith('agent-')) : [];
+        meta.textContent = labels.slice(0, 2).join(', ') || '';
+      }
+      left.appendChild(num);
+      left.appendChild(title);
+      left.appendChild(meta);
+      const statusEl = document.createElement('div');
+      statusEl.className = 'cfw-ml-row-status';
+      statusEl.textContent = issue.status || issue.state || '';
+      row.appendChild(left);
+      row.appendChild(statusEl);
+      row.onclick = () => openMobileIssueSheet(issue);
+      body.appendChild(row);
+    });
+  }
+
+  function openMobileIssueSheet(issue) {
+    state.mobileSheetIssueNumber = issue.number;
+    const content = document.getElementById('cfw-mbs-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const num = document.createElement('div');
+    num.className = 'cfw-is-num';
+    num.textContent = '#' + issue.number;
+
+    const titleLink = document.createElement('a');
+    titleLink.className = 'cfw-is-title';
+    titleLink.href = issue.url;
+    titleLink.target = '_blank';
+    titleLink.rel = 'noopener noreferrer';
+    titleLink.textContent = issue.title;
+
+    const statusEl = document.createElement('div');
+    statusEl.className = 'cfw-is-status';
+    statusEl.textContent = (issue.status || issue.state || '') + (issue.statusDetail ? ' · ' + issue.statusDetail : '');
+
+    const errorEl = document.createElement('div');
+    errorEl.id = 'cfw-is-error';
+    errorEl.className = 'cfw-is-error';
+
+    content.appendChild(num);
+    content.appendChild(titleLink);
+    content.appendChild(statusEl);
+
+    const labels = Array.isArray(issue.labels) ? issue.labels : [];
+    if (labels.length) {
+      const badges = document.createElement('div');
+      badges.className = 'cfw-is-badges';
+      labels.forEach((label) => {
+        const b = document.createElement('span');
+        b.className = 'cfw-badge';
+        b.textContent = label;
+        badges.appendChild(b);
+      });
+      content.appendChild(badges);
+    }
+
+    const { issueActions, prActions } = getActionSet(issue);
+
+    if (issueActions.length) {
+      const sec = document.createElement('div');
+      sec.className = 'cfw-is-section';
+      const lbl = document.createElement('div');
+      lbl.className = 'cfw-is-section-label';
+      lbl.textContent = 'Issue actions';
+      const acts = document.createElement('div');
+      acts.className = 'cfw-is-actions';
+      issueActions.forEach((action) => {
+        const wrap = document.createElement('div');
+        const btn = document.createElement('button');
+        btn.className = 'cfw-is-action-btn';
+        btn.textContent = action.label || action.id;
+        btn.disabled = Boolean(action.disabled);
+        if (!action.disabled) {
+          btn.onclick = () => applyMobileAction(issue.number, 'issue', action.id);
+        }
+        wrap.appendChild(btn);
+        if (action.disabled && action.reason) {
+          const r = document.createElement('span');
+          r.className = 'cfw-is-action-reason';
+          r.textContent = action.reason;
+          wrap.appendChild(r);
+        }
+        acts.appendChild(wrap);
+      });
+      sec.appendChild(lbl);
+      sec.appendChild(acts);
+      content.appendChild(sec);
+    }
+
+    if (issue.pullRequest && issue.pullRequest.url) {
+      const sec = document.createElement('div');
+      sec.className = 'cfw-is-section';
+      const lbl = document.createElement('div');
+      lbl.className = 'cfw-is-section-label';
+      lbl.textContent = 'Pull request';
+      const prLink = document.createElement('a');
+      prLink.className = 'cfw-is-pr-link';
+      prLink.href = issue.pullRequest.url;
+      prLink.target = '_blank';
+      prLink.rel = 'noopener noreferrer';
+      const prState = String(issue.pullRequest.state || '').toLowerCase() + (issue.pullRequest.isDraft ? ' · draft' : '');
+      prLink.textContent = 'PR #' + issue.pullRequest.number + ' · ' + prState;
+      sec.appendChild(lbl);
+      sec.appendChild(prLink);
+      if (prActions.length) {
+        const acts = document.createElement('div');
+        acts.className = 'cfw-is-actions';
+        acts.style.marginTop = '10px';
+        prActions.forEach((action) => {
+          const wrap = document.createElement('div');
+          const btn = document.createElement('button');
+          btn.className = 'cfw-is-action-btn';
+          btn.textContent = action.label || action.id;
+          btn.disabled = Boolean(action.disabled);
+          if (!action.disabled) {
+            btn.onclick = () => applyMobileAction(issue.number, 'pull_request', action.id);
+          }
+          wrap.appendChild(btn);
+          if (action.disabled && action.reason) {
+            const r = document.createElement('span');
+            r.className = 'cfw-is-action-reason';
+            r.textContent = action.reason;
+            wrap.appendChild(r);
+          }
+          acts.appendChild(wrap);
+        });
+        sec.appendChild(acts);
+      }
+      content.appendChild(sec);
+    }
+
+    content.appendChild(errorEl);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cfw-mbs-close';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = closeMobileSheet;
+    content.appendChild(closeBtn);
+
+    const overlay = document.getElementById('cfw-mbs-overlay');
+    const sheet = document.getElementById('cfw-mbs');
+    if (overlay) overlay.classList.add('active');
+    if (sheet) sheet.classList.add('active');
+  }
+
+  async function applyMobileAction(issueNumber, target, actionId) {
+    const errorEl = document.getElementById('cfw-is-error');
+    if (errorEl) { errorEl.classList.remove('active'); errorEl.textContent = ''; }
+    document.querySelectorAll('.cfw-is-action-btn').forEach((btn) => { btn.disabled = true; });
+    try {
+      await applyAction(issueNumber, target, actionId);
+      closeMobileSheet();
+      renderMobileIssues();
+    } catch (err) {
+      const msg = mapActionError((err && err.message) ? err.message : '');
+      if (errorEl) { errorEl.textContent = msg || 'Failed to apply action'; errorEl.classList.add('active'); }
+      document.querySelectorAll('.cfw-is-action-btn').forEach((btn) => { btn.disabled = false; });
+    }
+  }
+
+  function closeMobileSheet() {
+    const overlay = document.getElementById('cfw-mbs-overlay');
+    const sheet = document.getElementById('cfw-mbs');
+    if (overlay) overlay.classList.remove('active');
+    if (sheet) sheet.classList.remove('active');
+    state.mobileSheetIssueNumber = null;
+    window.setTimeout(() => {
+      const content = document.getElementById('cfw-mbs-content');
+      if (content) content.innerHTML = '';
+    }, 260);
+  }
+
+  function openMobileFilterSheet() {
+    const content = document.getElementById('cfw-mbs-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    function makeSection(labelText, inner) {
+      const sec = document.createElement('div');
+      sec.className = 'cfw-fs-section';
+      const lbl = document.createElement('div');
+      lbl.className = 'cfw-fs-label';
+      lbl.textContent = labelText;
+      sec.appendChild(lbl);
+      sec.appendChild(inner);
+      return sec;
+    }
+
+    const viewPills = document.createElement('div');
+    viewPills.className = 'cfw-fs-pills';
+    [['active', 'Active'], ['needs_action', 'Needs action'], ['completed', 'Completed'], ['all', 'All']].forEach(([val, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cfw-fs-pill' + (state.listView === val ? ' active' : '');
+      btn.textContent = label;
+      btn.dataset.val = val;
+      btn.onclick = () => {
+        state.listView = val;
+        viewPills.querySelectorAll('.cfw-fs-pill').forEach((b) => b.classList.toggle('active', b.dataset.val === val));
+        persistState();
+        void loadIssues(true).then(() => renderMobileIssues());
+      };
+      viewPills.appendChild(btn);
+    });
+    content.appendChild(makeSection('View', viewPills));
+
+    const sortPills = document.createElement('div');
+    sortPills.className = 'cfw-fs-pills';
+    [['updated_desc', 'Newest'], ['updated_asc', 'Oldest']].forEach(([val, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cfw-fs-pill' + (state.listSort === val ? ' active' : '');
+      btn.textContent = label;
+      btn.dataset.val = val;
+      btn.onclick = () => {
+        state.listSort = val;
+        sortPills.querySelectorAll('.cfw-fs-pill').forEach((b) => b.classList.toggle('active', b.dataset.val === val));
+        persistState();
+        void loadIssues(true).then(() => renderMobileIssues());
+      };
+      sortPills.appendChild(btn);
+    });
+    content.appendChild(makeSection('Sort', sortPills));
+
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'cfw-fs-chips';
+    [['new','New'],['queued','Queued'],['pr_draft','PR draft'],['pr_open','PR open'],['pr_closed_unmerged','PR closed'],['pr_merge_requested','Merge requested'],['merged','Merged'],['closed_unmerged','Closed']].forEach(([val, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cfw-fs-chip' + (state.listStatusFilter.includes(val) ? ' active' : '');
+      btn.textContent = label;
+      btn.onclick = () => {
+        toggleStatusFilter(val);
+        btn.classList.toggle('active', state.listStatusFilter.includes(val));
+        void loadIssues(true).then(() => renderMobileIssues());
+      };
+      chipsWrap.appendChild(btn);
+    });
+    content.appendChild(makeSection('Status', chipsWrap));
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'cfw-mbs-close';
+    clearBtn.style.marginBottom = '8px';
+    clearBtn.textContent = 'Clear filters';
+    clearBtn.onclick = () => { clearListFilters(); closeMobileSheet(); void loadIssues(true).then(() => renderMobileIssues()); };
+    content.appendChild(clearBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cfw-mbs-close';
+    closeBtn.textContent = 'Done';
+    closeBtn.onclick = closeMobileSheet;
+    content.appendChild(closeBtn);
+
+    const overlay = document.getElementById('cfw-mbs-overlay');
+    const sheet = document.getElementById('cfw-mbs');
+    if (overlay) overlay.classList.add('active');
+    if (sheet) sheet.classList.add('active');
+  }
+
+  function updateMobileTokenStatus() {
+    const el = document.getElementById('cfw-m-token-status');
+    if (!el) return;
+    const tok = readAdminToken();
+    el.textContent = tok ? 'Token is set: ' + tok.slice(0, 3) + '\u2026' : 'No token set.';
+  }
+
+  function setMobileTab(tab) {
+    state.activeTab = tab;
+    ['text', 'voice', 'list', 'settings'].forEach((t) => {
+      const view = document.getElementById('cfw-mv-' + t);
+      const btn = document.getElementById('cfw-nav-' + t);
+      if (view) view.classList.toggle('active', t === tab);
+      if (btn) btn.classList.toggle('active', t === tab);
+    });
+    if (tab === 'list') {
+      void loadIssues(false).then(() => renderMobileIssues());
+      renderMobileIssues();
+    }
+    if (tab === 'text') {
+      const t = document.getElementById('cfw-m-title');
+      if (t) window.setTimeout(() => t.focus(), 50);
+      applyPolicyUi();
+    }
+    persistState();
+  }
+
+  function createMobileShell() {
+    const CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>';
+    const SUCCESS_SCREEN = (hint) =>
+      '<div class="cfw-m-success-ring">' + CHECK_SVG + '</div><div class="cfw-m-success-hint">' + hint + '</div>';
+
+    const root = document.createElement('div');
+    root.id = 'cfw-mobile';
+
+    const body = document.createElement('div');
+    body.id = 'cfw-mobile-body';
+
+    const mvText = document.createElement('div');
+    mvText.id = 'cfw-mv-text';
+    mvText.className = 'cfw-mv';
+    mvText.innerHTML =
+      '<div id="cfw-mv-text-form" class="cfw-mf">'
+      + '<input id="cfw-m-title" type="text" placeholder="Title" maxlength="500" />'
+      + '<textarea id="cfw-m-description" placeholder="Describe the requested change..." maxlength="5000"></textarea>'
+      + '<div class="cfw-mf-policy"><label>Merge policy</label>'
+      + '<div class="cfw-m-hand-toggle">'
+      + '<button id="cfw-m-policy-manual" class="cfw-m-hand-btn" type="button">Manual</button>'
+      + '<button id="cfw-m-policy-auto" class="cfw-m-hand-btn" type="button">Auto-merge</button>'
+      + '</div></div>'
+      + '<div id="cfw-m-error" class="cfw-mf-error"></div>'
+      + '<div class="cfw-mf-actions">'
+      + '<button id="cfw-m-clear" class="cfw-btn cfw-btn-outline" style="display:none">Clear</button>'
+      + '<button id="cfw-m-create-only" class="cfw-btn cfw-btn-outline">Create</button>'
+      + '<button id="cfw-m-create-execute" class="cfw-btn cfw-btn-primary">Create &amp; Execute</button>'
+      + '</div>'
+      + '</div>'
+      + '<div id="cfw-mv-text-success" class="cfw-m-success" style="display:none">'
+      + SUCCESS_SCREEN('Tap to submit another')
+      + '</div>';
+
+    const mvVoice = document.createElement('div');
+    mvVoice.id = 'cfw-mv-voice';
+    mvVoice.className = 'cfw-mv';
+    mvVoice.innerHTML =
+      '<div id="cfw-mv-voice-form" class="cfw-m-voice">'
+      + '<div class="cfw-m-vstatus">'
+      + '<div id="cfw-mv-vstatus-line" class="cfw-m-vstatus-line">Ready to record</div>'
+      + '<div class="cfw-m-vmeta"><span>Draft recording</span><strong id="cfw-mv-vtimer">00:00</strong></div>'
+      + '</div>'
+      + '<div class="cfw-m-vcontrols">'
+      + '<button id="cfw-mv-vrecord" class="cfw-btn cfw-btn-outline">Record</button>'
+      + '<button id="cfw-mv-vreset" class="cfw-btn cfw-btn-danger" disabled>Reset</button>'
+      + '<button id="cfw-mv-vsend" class="cfw-btn cfw-btn-primary" disabled>Send</button>'
+      + '</div>'
+      + '<div id="cfw-mv-vhint" class="cfw-m-vhint">Tap Record to start. Settings ⚙ contains merge policy.</div>'
+      + '<div id="cfw-mv-verror" class="cfw-m-verror"></div>'
+      + '</div>'
+      + '<div id="cfw-mv-voice-success" class="cfw-m-success" style="display:none">'
+      + SUCCESS_SCREEN('Tap to record another')
+      + '</div>';
+
+    const mvList = document.createElement('div');
+    mvList.id = 'cfw-mv-list';
+    mvList.className = 'cfw-mv';
+    mvList.innerHTML =
+      '<div id="cfw-ml-head">'
+      + '<span id="cfw-ml-head-title">Requests</span>'
+      + '<div id="cfw-ml-head-actions">'
+      + '<button id="cfw-ml-filter-btn">⊞ Filter</button>'
+      + '<button id="cfw-ml-refresh-btn">↻</button>'
+      + '</div>'
+      + '</div>'
+      + '<div id="cfw-ml-error" class="cfw-error"></div>'
+      + '<div id="cfw-ml-body"></div>';
+
+    const mvSettings = document.createElement('div');
+    mvSettings.id = 'cfw-mv-settings';
+    mvSettings.className = 'cfw-mv';
+    mvSettings.innerHTML =
+      '<div class="cfw-m-settings">'
+      + '<h3>Admin token</h3>'
+      + '<div id="cfw-m-token-status" class="cfw-m-settings-token"></div>'
+      + '<div class="cfw-m-hand-toggle">'
+      + '<button id="cfw-m-token-update" class="cfw-m-hand-btn">Update</button>'
+      + '<button id="cfw-m-token-clear" class="cfw-m-hand-btn">Clear</button>'
+      + '</div>'
+      + '<p class="cfw-m-settings-note">Token authenticates all widget actions.</p>'
+      + '<h3>Merge policy</h3>'
+      + '<div class="cfw-m-hand-toggle">'
+      + '<button id="cfw-m-vpolicy-manual" class="cfw-m-hand-btn" type="button">Manual</button>'
+      + '<button id="cfw-m-vpolicy-auto" class="cfw-m-hand-btn" type="button">Auto-merge</button>'
+      + '</div>'
+      + '<h3>Button side</h3>'
+      + '<div class="cfw-m-hand-toggle">'
+      + '<button id="cfw-m-hand-left" class="cfw-m-hand-btn">&#9664; Left</button>'
+      + '<button id="cfw-m-hand-right" class="cfw-m-hand-btn">Right &#9654;</button>'
+      + '</div>'
+      + '<p class="cfw-m-settings-note">Or swipe the open button left or right.</p>'
+      + '</div>';
+
+    body.appendChild(mvText);
+    body.appendChild(mvVoice);
+    body.appendChild(mvList);
+    body.appendChild(mvSettings);
+
+    const CLOSE = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5M12 5l-7 7 7 7"/></svg>';
+    const PENCIL = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 112.97 2.971L8.35 17.94 4 19l1.06-4.35L16.862 3.487z"/></svg>';
+    const MIC = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1a3 3 0 013 3v8a3 3 0 01-6 0V4a3 3 0 013-3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10a7 7 0 01-14 0M12 19v4M8 23h8"/></svg>';
+    const LIST = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>';
+    const GEAR = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>';
+
+    const nav = document.createElement('nav');
+    nav.id = 'cfw-mobile-nav';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cfw-nav-btn';
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = CLOSE + '<span>Close</span>';
+    closeBtn.onclick = () => { root.style.display = 'none'; mobileLauncher.style.display = ''; };
+    [['text', PENCIL, 'Text'], ['voice', MIC, 'Voice'], ['list', LIST, 'Requests'], ['settings', GEAR, 'Settings']].forEach(([tab, icon, label]) => {
+      const btn = document.createElement('button');
+      btn.id = 'cfw-nav-' + tab;
+      btn.className = 'cfw-nav-btn';
+      btn.type = 'button';
+      btn.innerHTML = icon + '<span>' + label + '</span>';
+      btn.onclick = () => setMobileTab(tab);
+      nav.appendChild(btn);
+    });
+
+    function applyHandedness(side) {
+      state.handedness = side;
+      if (side === 'left') {
+        mobileLauncher.style.left = '10px';
+        mobileLauncher.style.right = '';
+        swipeHint.style.left = '10px';
+        swipeHint.style.right = '';
+        nav.insertBefore(closeBtn, nav.firstChild);
+      } else {
+        mobileLauncher.style.right = '10px';
+        mobileLauncher.style.left = '';
+        swipeHint.style.right = '10px';
+        swipeHint.style.left = '';
+        nav.appendChild(closeBtn);
+      }
+      const hl = document.getElementById('cfw-m-hand-left');
+      const hr = document.getElementById('cfw-m-hand-right');
+      if (hl) hl.classList.toggle('active', side === 'left');
+      if (hr) hr.classList.toggle('active', side === 'right');
+    }
+
+    root.appendChild(body);
+    root.appendChild(nav);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cfw-mbs-overlay';
+    overlay.onclick = closeMobileSheet;
+
+    const sheet = document.createElement('div');
+    sheet.id = 'cfw-mbs';
+    sheet.innerHTML = '<div id="cfw-mbs-handle"></div><div id="cfw-mbs-content"></div>';
+
+    const toast = document.createElement('div');
+    toast.id = 'cfw-toast';
+
+    const mobileLauncher = document.createElement('button');
+    mobileLauncher.id = 'cfw-mobile-launcher';
+    mobileLauncher.type = 'button';
+    mobileLauncher.setAttribute('aria-label', 'Open feedback widget');
+    mobileLauncher.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 112.97 2.971L8.35 17.94 4 19l1.06-4.35L16.862 3.487z"/></svg>';
+    let swipeStartX = 0;
+    mobileLauncher.addEventListener('touchstart', (e) => {
+      swipeStartX = e.touches[0].clientX;
+    }, { passive: true });
+    mobileLauncher.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - swipeStartX;
+      if (Math.abs(dx) >= 40) {
+        applyHandedness(dx < 0 ? 'left' : 'right');
+        persistState();
+        e.preventDefault();
+        return;
+      }
+      mobileLauncher.style.display = 'none';
+      root.style.display = 'flex';
+    });
+    mobileLauncher.onclick = () => {
+      mobileLauncher.style.display = 'none';
+      root.style.display = 'flex';
+    };
+
+    const swipeHint = document.createElement('div');
+    swipeHint.id = 'cfw-swipe-hint';
+    swipeHint.textContent = '\u2190 swipe \u2192';
+
+    document.body.appendChild(root);
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+    document.body.appendChild(toast);
+    document.body.appendChild(mobileLauncher);
+    document.body.appendChild(swipeHint);
+
+    const HINT_SHOWN_KEY = 'thoughts:swipe-hint-shown';
+    if (!localStorage.getItem(HINT_SHOWN_KEY)) {
+      localStorage.setItem(HINT_SHOWN_KEY, '1');
+      setTimeout(() => {
+        swipeHint.classList.add('visible');
+        setTimeout(() => swipeHint.classList.remove('visible'), 2500);
+      }, 900);
+    }
+
+    // ── Wire events ──
+    function updateMobileClearBtn() {
+      const btn = document.getElementById('cfw-m-clear');
+      if (!btn) return;
+      const hasContent = !!(state.draftTitle.trim() || state.draftDescription.trim());
+      btn.style.display = hasContent ? '' : 'none';
+    }
+
+    const titleEl = document.getElementById('cfw-m-title');
+    if (titleEl) {
+      titleEl.value = state.draftTitle;
+      titleEl.addEventListener('input', () => { state.draftTitle = titleEl.value; persistState(); updateMobileClearBtn(); });
+    }
+    const descEl = document.getElementById('cfw-m-description');
+    if (descEl) {
+      descEl.value = state.draftDescription;
+      descEl.addEventListener('input', () => { state.draftDescription = descEl.value; persistState(); updateMobileClearBtn(); });
+    }
+    updateMobileClearBtn();
+
+    const clearBtn = document.getElementById('cfw-m-clear');
+    if (clearBtn) clearBtn.onclick = () => {
+      state.draftTitle = '';
+      state.draftDescription = '';
+      if (titleEl) titleEl.value = '';
+      if (descEl) descEl.value = '';
+      persistState();
+      updateMobileClearBtn();
+    };
+
+    function applyPolicyUi() {
+      const isAuto = state.draftMergePolicy === 'auto_unblocked';
+      const pm = document.getElementById('cfw-m-policy-manual');
+      const pa = document.getElementById('cfw-m-policy-auto');
+      const vm = document.getElementById('cfw-m-vpolicy-manual');
+      const va = document.getElementById('cfw-m-vpolicy-auto');
+      if (pm) pm.classList.toggle('active', !isAuto);
+      if (pa) pa.classList.toggle('active', isAuto);
+      if (vm) vm.classList.toggle('active', !isAuto);
+      if (va) va.classList.toggle('active', isAuto);
+    }
+    const pm = document.getElementById('cfw-m-policy-manual');
+    if (pm) pm.onclick = () => { state.draftMergePolicy = 'manual'; applyPolicyUi(); };
+    const pa = document.getElementById('cfw-m-policy-auto');
+    if (pa) pa.onclick = () => { state.draftMergePolicy = 'auto_unblocked'; applyPolicyUi(); };
+    const vm = document.getElementById('cfw-m-vpolicy-manual');
+    if (vm) vm.onclick = () => { state.draftMergePolicy = 'manual'; persistState(); applyPolicyUi(); };
+    const va = document.getElementById('cfw-m-vpolicy-auto');
+    if (va) va.onclick = () => { state.draftMergePolicy = 'auto_unblocked'; persistState(); applyPolicyUi(); };
+
+    const createOnly = document.getElementById('cfw-m-create-only');
+    if (createOnly) createOnly.onclick = () => createRequest(false);
+    const createExec = document.getElementById('cfw-m-create-execute');
+    if (createExec) createExec.onclick = () => createRequest(true);
+
+    const textSuccess = document.getElementById('cfw-mv-text-success');
+    if (textSuccess) textSuccess.onclick = () => { setTextCreateSuccess(false); };
+
+    const vrecord = document.getElementById('cfw-mv-vrecord');
+    if (vrecord) vrecord.onclick = () => toggleVoiceRecording();
+    const vreset = document.getElementById('cfw-mv-vreset');
+    if (vreset) vreset.onclick = () => resetVoiceDraft();
+    const vsend = document.getElementById('cfw-mv-vsend');
+    if (vsend) vsend.onclick = () => sendVoiceDraft();
+
+    const voiceSuccess = document.getElementById('cfw-mv-voice-success');
+    if (voiceSuccess) voiceSuccess.onclick = () => { setVoiceCreateSuccess(false); };
+
+    const filterBtn = document.getElementById('cfw-ml-filter-btn');
+    if (filterBtn) filterBtn.onclick = () => openMobileFilterSheet();
+    const refreshBtn = document.getElementById('cfw-ml-refresh-btn');
+    if (refreshBtn) refreshBtn.onclick = () => { void loadIssues(true).then(() => renderMobileIssues()); };
+
+    const tokenUpdate = document.getElementById('cfw-m-token-update');
+    if (tokenUpdate) tokenUpdate.onclick = () => { promptAdminToken(); updateMobileTokenStatus(); void loadIssues(true).then(() => renderMobileIssues()); };
+    const tokenClear = document.getElementById('cfw-m-token-clear');
+    if (tokenClear) tokenClear.onclick = () => {
+      if (!window.confirm('Clear saved admin token?')) return;
+      writeAdminToken('');
+      updateMobileTokenStatus();
+    };
+
+    const handLeft = document.getElementById('cfw-m-hand-left');
+    if (handLeft) handLeft.onclick = () => { applyHandedness('left'); persistState(); };
+    const handRight = document.getElementById('cfw-m-hand-right');
+    if (handRight) handRight.onclick = () => { applyHandedness('right'); persistState(); };
+
+    updateMobileTokenStatus();
+    updateVoiceComposer();
+    applyPolicyUi();
+    applyHandedness(state.handedness === 'left' ? 'left' : (config.handedness || 'right'));
+
+    const activeTab = ['text', 'voice', 'list', 'settings'].includes(state.activeTab) ? state.activeTab : 'list';
+    setMobileTab(activeTab);
+  }
+
+  // ── End mobile functions ───────────────────────────────────────────────────
+
   function init() {
-    if (document.getElementById('cfw-feedback-widget')) return;
+    if (document.getElementById('cfw-feedback-widget') || document.getElementById('cfw-mobile')) return;
     restoreState();
+    document.head.appendChild(createStyles());
     state.captureMode = state.captureMode === 'voice' || state.captureMode === 'text'
       ? state.captureMode
       : getDefaultCaptureMode();
+    if (!['text', 'voice', 'list', 'settings'].includes(state.activeTab)) {
+      if (state.activeTab === 'requests') state.activeTab = 'list';
+      else if (state.activeTab === 'new') state.activeTab = 'list';
+    }
     createWidgetShell();
+    createMobileShell();
   }
 
   if (document.readyState === 'loading') {
