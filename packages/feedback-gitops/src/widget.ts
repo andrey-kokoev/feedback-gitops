@@ -1,16 +1,21 @@
+import { generateInlineAudioRecorderSource } from "./inline-recorder";
+
 /**
  * Generates the widget.js script content that gets injected into client pages.
  */
 export function generateWidgetScript(endpoint: string, defaultRepo: string, defaultLabels: string[]): string {
   const baseEndpoint = endpoint.replace(/\/+$/, "");
   const defaultLabelsStr = defaultLabels.join(",");
+  const inlineRecorderSource = generateInlineAudioRecorderSource();
 
   return `
 (function() {
   'use strict';
+${inlineRecorderSource}
 
   const ADMIN_TOKEN_STORAGE_KEY = 'thoughts:admin-token';
   const STATE_STORAGE_KEY = 'thoughts:widget-state';
+  let voiceRecorder = null;
 
   function getBootstrapConfig() {
     const scriptEl = document.currentScript instanceof HTMLScriptElement ? document.currentScript : null;
@@ -41,8 +46,17 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     return ADMIN_TOKEN_STORAGE_KEY;
   }
 
+  function getDefaultCaptureMode() {
+    try {
+      return window.matchMedia('(max-width: 680px)').matches ? 'voice' : 'text';
+    } catch {
+      return 'text';
+    }
+  }
+
   const state = {
     activeTab: 'new',
+    captureMode: 'text',
     issues: [],
     issuesLoaded: false,
     loadingIssues: false,
@@ -56,6 +70,11 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     draftTitle: '',
     draftDescription: '',
     draftMergePolicy: 'manual',
+    draftSettingsOpen: false,
+    voiceDraftState: 'idle',
+    voiceDraftReady: false,
+    voiceDraftDurationMs: 0,
+    voiceDraftTimer: null,
     createError: '',
     listError: '',
     executeError: '',
@@ -164,11 +183,15 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
   function restoreState() {
     try {
       const raw = localStorage.getItem(getStateStorageKey());
-      if (!raw) return;
+      if (!raw) {
+        state.captureMode = getDefaultCaptureMode();
+        return;
+      }
       const saved = JSON.parse(raw);
       if (!saved || typeof saved !== 'object') return;
 
       if (saved.activeTab === 'new' || saved.activeTab === 'requests') state.activeTab = saved.activeTab;
+      if (saved.captureMode === 'text' || saved.captureMode === 'voice') state.captureMode = saved.captureMode;
       if (Array.isArray(saved.issues)) state.issues = saved.issues;
       state.issuesLoaded = Boolean(saved.issuesLoaded);
       state.panelOpen = Boolean(saved.panelOpen);
@@ -180,6 +203,7 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
       if (typeof saved.draftTitle === 'string') state.draftTitle = saved.draftTitle;
       if (typeof saved.draftDescription === 'string') state.draftDescription = normalizeLegacyDraftDescription(saved.draftDescription);
       if (typeof saved.draftMergePolicy === 'string') state.draftMergePolicy = saved.draftMergePolicy;
+      state.draftSettingsOpen = Boolean(saved.draftSettingsOpen);
 
       if (typeof saved.createError === 'string') state.createError = saved.createError;
       if (typeof saved.listError === 'string') state.listError = saved.listError;
@@ -196,6 +220,7 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     try {
       const snapshot = {
         activeTab: state.activeTab,
+        captureMode: state.captureMode,
         issues: state.issues,
         issuesLoaded: state.issuesLoaded,
         panelOpen: state.panelOpen,
@@ -204,6 +229,7 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
         draftTitle: state.draftTitle,
         draftDescription: state.draftDescription,
         draftMergePolicy: state.draftMergePolicy,
+        draftSettingsOpen: state.draftSettingsOpen,
         createError: state.createError,
         listError: state.listError,
         executeError: state.executeError,
@@ -239,6 +265,36 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     const descriptionEl = document.getElementById('cfw-description');
     if (descriptionEl) descriptionEl.value = state.draftDescription;
     persistState();
+  }
+
+  function formatDuration(valueMs) {
+    const totalSeconds = Math.max(0, Math.floor(Number(valueMs || 0) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+  }
+
+  function stopVoiceDraftTimer() {
+    if (state.voiceDraftTimer) {
+      window.clearInterval(state.voiceDraftTimer);
+      state.voiceDraftTimer = null;
+    }
+  }
+
+  function startVoiceDraftTimer() {
+    stopVoiceDraftTimer();
+    state.voiceDraftTimer = window.setInterval(() => {
+      state.voiceDraftDurationMs += 1000;
+      updateVoiceComposer();
+      persistState();
+    }, 1000);
+  }
+
+  async function getVoiceRecorder() {
+    if (!voiceRecorder) {
+      voiceRecorder = createInlineAudioRecorder();
+    }
+    return voiceRecorder;
   }
 
   function createStyles() {
@@ -279,6 +335,23 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 .cfw-label { display: block; font-size: 12px; color: #9bb7d3; margin-bottom: 6px; }
 .cfw-select { height: 36px; padding: 0 12px; }
 .cfw-muted-note { font-size: 11px; color: #7f9cbc; margin: -4px 0 10px; }
+.cfw-capture-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.cfw-capture-modes button { height: 34px; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #9bb7d3; cursor: pointer; font-size: 12px; }
+.cfw-capture-modes button.active { color: #d9e7f7; border-color: rgba(124, 187, 255, 0.45); background: #0f1c2f; }
+.cfw-capture-pane { display: none; }
+.cfw-capture-pane.active { display: block; }
+.cfw-settings-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cfw-settings-toggle { width: 34px; height: 34px; border-radius: 6px; }
+.cfw-settings-panel { display: none; border: 1px solid #2f4864; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: rgba(11, 24, 40, 0.65); }
+.cfw-settings-panel.active { display: block; }
+.cfw-voice-shell { display: grid; gap: 12px; }
+.cfw-voice-status { border: 1px solid #2f4864; border-radius: 10px; padding: 14px; background: rgba(11, 24, 40, 0.65); }
+.cfw-voice-status-line { font-size: 13px; color: #d9e7f7; margin-bottom: 6px; }
+.cfw-voice-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: #9bb7d3; }
+.cfw-voice-controls { display: grid; grid-template-columns: 1.2fr .8fr .8fr; gap: 8px; }
+.cfw-btn-danger { border-color: rgba(255, 154, 154, 0.45); color: #ffd4d4; background: rgba(60, 12, 16, 0.6); }
+.cfw-btn-danger:hover { border-color: rgba(255, 154, 154, 0.65); background: rgba(84, 18, 23, 0.72); color: #fff1f1; }
+.cfw-voice-hint { font-size: 11px; color: #7f9cbc; }
 #cfw-new-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
 .cfw-btn { height: 34px; padding: 0 12px; border-radius: 6px; border: 1px solid transparent; font-size: 12px; cursor: pointer; }
 .cfw-btn-outline { border-color: rgba(124, 187, 255, 0.4); color: #9ad2ff; background: rgba(10, 17, 29, 0.8); }
@@ -324,11 +397,116 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 @media (max-width: 680px) {
   #cfw-feedback-widget { right: 10px; bottom: 10px; }
   #cfw-feedback-panel { top: 10px; right: 10px; width: calc(100vw - 20px); height: calc(100vh - 20px); }
+  .cfw-voice-controls { grid-template-columns: 1fr; }
   #cfw-requests-controls-top { grid-template-columns: 1fr; }
   #cfw-issues-table-wrap { display: none; }
   #cfw-issues-cards { display: grid; }
 }\`;
     return style;
+  }
+
+  function setCaptureMode(mode) {
+    state.captureMode = mode === 'voice' ? 'voice' : 'text';
+    updateCaptureModeUi();
+    persistState();
+  }
+
+  function updateCaptureModeUi() {
+    ['voice', 'text'].forEach((mode) => {
+      const button = document.getElementById('cfw-mode-' + mode);
+      const pane = document.getElementById('cfw-pane-' + mode);
+      if (button) button.classList.toggle('active', state.captureMode === mode);
+      if (pane) pane.classList.toggle('active', state.captureMode === mode);
+    });
+    const actions = document.getElementById('cfw-new-actions');
+    if (actions) actions.style.display = state.captureMode === 'text' ? 'flex' : 'none';
+  }
+
+  function setDraftSettingsOpen(nextOpen) {
+    state.draftSettingsOpen = Boolean(nextOpen);
+    const panel = document.getElementById('cfw-draft-settings');
+    const toggle = document.getElementById('cfw-draft-settings-toggle');
+    if (panel) panel.classList.toggle('active', state.draftSettingsOpen);
+    if (toggle) toggle.setAttribute('aria-expanded', state.draftSettingsOpen ? 'true' : 'false');
+    persistState();
+  }
+
+  function updateVoiceComposer() {
+    const statusLine = document.getElementById('cfw-voice-status-line');
+    const timer = document.getElementById('cfw-voice-timer');
+    const hint = document.getElementById('cfw-voice-hint');
+    const recordBtn = document.getElementById('cfw-voice-record');
+    const resetBtn = document.getElementById('cfw-voice-reset');
+    const sendBtn = document.getElementById('cfw-voice-send');
+
+    if (statusLine) {
+      if (state.voiceDraftState === 'recording') statusLine.textContent = 'Recording in progress';
+      else if (state.voiceDraftState === 'paused' && state.voiceDraftReady) statusLine.textContent = 'Recording paused';
+      else statusLine.textContent = 'Ready to record';
+    }
+    if (timer) timer.textContent = formatDuration(state.voiceDraftDurationMs);
+    if (hint) {
+      hint.textContent = state.voiceDraftReady
+        ? 'Audio draft is kept locally for now. Send wiring comes next.'
+        : 'Tap Record to start a draft. Settings contains merge policy.';
+    }
+    if (recordBtn) {
+      recordBtn.textContent = state.voiceDraftState === 'recording' ? 'Pause' : 'Record';
+      recordBtn.className = state.voiceDraftState === 'recording' ? 'cfw-btn cfw-btn-primary' : 'cfw-btn cfw-btn-outline';
+    }
+    if (resetBtn) resetBtn.disabled = !state.voiceDraftReady && state.voiceDraftState === 'idle';
+    if (sendBtn) sendBtn.disabled = state.voiceDraftState === 'recording' || !state.voiceDraftReady;
+  }
+
+  async function toggleVoiceRecording() {
+    setCreateError('');
+    try {
+      const recorder = await getVoiceRecorder();
+      if (state.voiceDraftState === 'recording') {
+        await recorder.pause();
+        state.voiceDraftState = 'paused';
+        state.voiceDraftReady = recorder.hasContent();
+        stopVoiceDraftTimer();
+      } else {
+        await recorder.start();
+        state.voiceDraftState = 'recording';
+        state.voiceDraftReady = recorder.hasContent();
+        startVoiceDraftTimer();
+      }
+      updateVoiceComposer();
+      persistState();
+    } catch (err) {
+      setCreateError((err && err.message) ? err.message : 'Failed to access microphone');
+    }
+  }
+
+  async function resetVoiceDraft() {
+    stopVoiceDraftTimer();
+    if (voiceRecorder) {
+      await voiceRecorder.reset();
+      voiceRecorder = null;
+    }
+    state.voiceDraftState = 'idle';
+    state.voiceDraftReady = false;
+    state.voiceDraftDurationMs = 0;
+    setCreateError('');
+    updateVoiceComposer();
+    persistState();
+  }
+
+  async function sendVoiceDraft() {
+    if (!state.voiceDraftReady) return;
+    try {
+      const recorder = await getVoiceRecorder();
+      const blob = await recorder.exportRecording();
+      if (!blob || blob.size < 1) {
+        setCreateError('No recorded audio available yet.');
+        return;
+      }
+      setCreateError('Voice upload is not wired yet. Recorder module is now live and captured ' + Math.ceil(blob.size / 1024) + ' KB.');
+    } catch (err) {
+      setCreateError((err && err.message) ? err.message : 'Failed to prepare recording');
+    }
   }
 
   function setTab(tab) {
@@ -495,6 +673,9 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
     ensureDefaultDraftDescription();
     if (titleEl) titleEl.value = state.draftTitle;
     if (descriptionEl) descriptionEl.value = state.draftDescription;
+    updateCaptureModeUi();
+    setDraftSettingsOpen(state.draftSettingsOpen);
+    updateVoiceComposer();
 
     if (state.issuesLoaded && state.issues.length > 0) setTab('requests');
     else setTab(state.activeTab);
@@ -1029,16 +1210,47 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
       + '</div>'
       + '<div id="cfw-panel-body">'
       + '<section id="cfw-view-new">'
-      + '<input id="cfw-title" type="text" placeholder="Title" maxlength="500" />'
-      + '<textarea id="cfw-description" placeholder="Describe the requested change..." maxlength="5000"></textarea>'
-      + '<div class="cfw-field-group">'
+      + '<div class="cfw-capture-modes">'
+      + '<button id="cfw-mode-voice" type="button">Voice</button>'
+      + '<button id="cfw-mode-text" type="button">Type</button>'
+      + '</div>'
+      + '<div id="cfw-pane-voice" class="cfw-capture-pane">'
+      + '<div class="cfw-voice-shell">'
+      + '<div class="cfw-settings-row">'
+      + '<p class="cfw-muted-note">Current URL is attached automatically to the issue payload.</p>'
+      + '<button id="cfw-draft-settings-toggle" type="button" class="cfw-btn cfw-btn-outline cfw-settings-toggle" aria-expanded="false" aria-controls="cfw-draft-settings">⚙</button>'
+      + '</div>'
+      + '<div id="cfw-draft-settings" class="cfw-settings-panel">'
       + '<label class="cfw-label" for="cfw-merge-policy">Merge policy</label>'
       + '<select id="cfw-merge-policy" class="cfw-select">'
       + '<option value="manual">Manual merge</option>'
       + '<option value="auto_unblocked">Auto-merge when unblocked</option>'
       + '</select>'
       + '</div>'
+      + '<div class="cfw-voice-status">'
+      + '<div id="cfw-voice-status-line" class="cfw-voice-status-line">Ready to record</div>'
+      + '<div class="cfw-voice-meta"><span>Draft recording</span><strong id="cfw-voice-timer">00:00</strong></div>'
+      + '</div>'
+      + '<div class="cfw-voice-controls">'
+      + '<button id="cfw-voice-record" type="button" class="cfw-btn cfw-btn-outline">Record</button>'
+      + '<button id="cfw-voice-reset" type="button" class="cfw-btn cfw-btn-danger" disabled>Reset</button>'
+      + '<button id="cfw-voice-send" type="button" class="cfw-btn cfw-btn-primary" disabled>Send</button>'
+      + '</div>'
+      + '<div id="cfw-voice-hint" class="cfw-voice-hint">Tap Record to start a draft. Settings contains merge policy.</div>'
+      + '</div>'
+      + '</div>'
+      + '<div id="cfw-pane-text" class="cfw-capture-pane">'
+      + '<input id="cfw-title" type="text" placeholder="Title" maxlength="500" />'
+      + '<textarea id="cfw-description" placeholder="Describe the requested change..." maxlength="5000"></textarea>'
+      + '<div class="cfw-field-group">'
+      + '<label class="cfw-label" for="cfw-text-merge-policy">Merge policy</label>'
+      + '<select id="cfw-text-merge-policy" class="cfw-select">'
+      + '<option value="manual">Manual merge</option>'
+      + '<option value="auto_unblocked">Auto-merge when unblocked</option>'
+      + '</select>'
+      + '</div>'
       + '<p class="cfw-muted-note">Current URL is attached automatically to the issue payload.</p>'
+      + '</div>'
       + '<div id="cfw-new-error" class="cfw-error"></div>'
       + '<div id="cfw-new-actions">'
       + '<button id="cfw-create-only" type="button" class="cfw-btn cfw-btn-outline">Create only</button>'
@@ -1139,6 +1351,12 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
       setTab('new');
     };
 
+    const voiceModeBtn = document.getElementById('cfw-mode-voice');
+    if (voiceModeBtn) voiceModeBtn.onclick = () => setCaptureMode('voice');
+
+    const textModeBtn = document.getElementById('cfw-mode-text');
+    if (textModeBtn) textModeBtn.onclick = () => setCaptureMode('text');
+
     const tabRequests = document.getElementById('cfw-tab-requests');
     if (tabRequests) {
       tabRequests.onclick = () => {
@@ -1152,6 +1370,18 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
 
     const createExecute = document.getElementById('cfw-create-execute');
     if (createExecute) createExecute.onclick = () => createRequest(true);
+
+    const draftSettingsToggle = document.getElementById('cfw-draft-settings-toggle');
+    if (draftSettingsToggle) draftSettingsToggle.onclick = () => setDraftSettingsOpen(!state.draftSettingsOpen);
+
+    const voiceRecord = document.getElementById('cfw-voice-record');
+    if (voiceRecord) voiceRecord.onclick = () => toggleVoiceRecording();
+
+    const voiceReset = document.getElementById('cfw-voice-reset');
+    if (voiceReset) voiceReset.onclick = () => resetVoiceDraft();
+
+    const voiceSend = document.getElementById('cfw-voice-send');
+    if (voiceSend) voiceSend.onclick = () => sendVoiceDraft();
 
     const refresh = document.getElementById('cfw-refresh-issues');
     if (refresh) refresh.onclick = () => loadIssues(true);
@@ -1221,10 +1451,26 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
       policyEl.value = state.draftMergePolicy || 'manual';
       policyEl.addEventListener('change', () => {
         state.draftMergePolicy = String(policyEl.value || 'manual');
+        const textPolicyEl = document.getElementById('cfw-text-merge-policy');
+        if (textPolicyEl) textPolicyEl.value = state.draftMergePolicy;
         persistState();
       });
     }
 
+    const textPolicyEl = document.getElementById('cfw-text-merge-policy');
+    if (textPolicyEl) {
+      textPolicyEl.value = state.draftMergePolicy || 'manual';
+      textPolicyEl.addEventListener('change', () => {
+        state.draftMergePolicy = String(textPolicyEl.value || 'manual');
+        const voicePolicyEl = document.getElementById('cfw-merge-policy');
+        if (voicePolicyEl) voicePolicyEl.value = state.draftMergePolicy;
+        persistState();
+      });
+    }
+
+    updateCaptureModeUi();
+    setDraftSettingsOpen(state.draftSettingsOpen);
+    updateVoiceComposer();
     setTab(state.activeTab);
     updateTokenIndicators();
     updateListControls();
@@ -1242,6 +1488,9 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
   function init() {
     if (document.getElementById('cfw-feedback-widget')) return;
     restoreState();
+    state.captureMode = state.captureMode === 'voice' || state.captureMode === 'text'
+      ? state.captureMode
+      : getDefaultCaptureMode();
     createWidgetShell();
   }
 
