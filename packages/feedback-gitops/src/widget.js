@@ -298,7 +298,7 @@ ${inlineRecorderSource}
   function createStyles() {
     const style = document.createElement('style');
     style.textContent = \`#cfw-feedback-widget { position: fixed; right: 18px; bottom: 18px; z-index: 9999; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #d9e7f7; }
-#cfw-feedback-launcher { height: 34px; width: 34px; border-radius: 6px; border: 1px solid rgba(124, 187, 255, 0.4); background: rgba(10, 17, 29, 0.9); color: #9ad2ff; box-shadow: 0 8px 20px rgba(2, 7, 14, 0.35); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+#cfw-feedback-launcher { height: 34px; width: 34px; margin-right: 10px; border-radius: 6px; border: 1px solid rgba(124, 187, 255, 0.4); background: rgba(10, 17, 29, 0.9); color: #9ad2ff; box-shadow: 0 8px 20px rgba(2, 7, 14, 0.35); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
 #cfw-feedback-launcher:hover { color: #d9e7f7; border-color: rgba(154, 210, 255, 0.55); background: rgba(12, 25, 40, 0.95); }
 #cfw-feedback-launcher.needs-token { opacity: 0.88; }
 #cfw-feedback-launcher svg { width: 14px; height: 14px; }
@@ -393,7 +393,7 @@ ${inlineRecorderSource}
 #cfw-toast.active { display: block; }
 #cfw-toast a { color: #9ad2ff; text-decoration: underline; text-underline-offset: 2px; }
 @media (max-width: 680px) {
-  #cfw-feedback-widget { right: 10px; bottom: 10px; }
+  #cfw-feedback-widget { right: 0; bottom: 10px; }
   #cfw-feedback-panel { top: 10px; right: 10px; width: calc(100vw - 20px); height: calc(100vh - 20px); }
   .cfw-voice-controls { grid-template-columns: 1fr; }
   #cfw-requests-controls-top { grid-template-columns: 1fr; }
