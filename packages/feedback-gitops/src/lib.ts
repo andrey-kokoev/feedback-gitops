@@ -14,3 +14,5 @@ export type {
 } from "./consumer";
 
 export { generateWidgetScript } from "./widget";
+
+export { default as worker } from "./index";

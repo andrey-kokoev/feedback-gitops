@@ -1,6 +1,6 @@
 {
   "name": "feedback-gitops",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn user feedback into GitHub issues via a Cloudflare Worker queue, with a self-hosted mobile-first widget",
   "license": "MIT",
   "type": "module",
