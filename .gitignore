@@ -4,4 +4,5 @@ node_modules
 packages/*/.wrangler
 packages/*/node_modules
 packages/*/.dev.vars
+packages/*/dist
 .DS_Store
