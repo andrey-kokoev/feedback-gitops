@@ -60,15 +60,6 @@ workers/feedback-gitops/        (or packages/feedback-gitops/)
 
 Secrets set on the worker: `API_KEY`, `ADMIN_TOKEN`, `GITHUB_PAT`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_BASE_BRANCH`.
 
-## Existing instances
-
-| Worker | Host project | GitHub repo |
-|---|---|---|
-| `feedback-gitops-thoughts` | `~/src/thoughts/packages/feedback-gitops` | `andrey-kokoev/thoughts` |
-| `feedback-gitops-t391-patterns-app` | `~/src/t391-patterns-app/packages/feedback-gitops` | `andrey-kokoev/t391-patterns` |
-| `feedback-gitops-smart-scheduling` | `~/src/smart-scheduling/workers/feedback-gitops` | `global-maxima/smart-scheduling` |
-| `feedback-gitops-dev` | `packages/feedback-gitops` (this repo) | — development only — |
-
 ## Publishing the npm package
 
 ```bash
