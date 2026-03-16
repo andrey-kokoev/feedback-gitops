@@ -6,3 +6,4 @@ packages/*/node_modules
 packages/*/.dev.vars
 packages/*/dist
 .DS_Store
+packages/*/package-lock.json
