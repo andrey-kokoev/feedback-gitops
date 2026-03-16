@@ -14,21 +14,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
         working-directory: packages/feedback-gitops
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
         working-directory: packages/feedback-gitops
 
       - name: Publish
-        run: npm publish --provenance
+        run: pnpm publish --provenance --no-git-checks
         working-directory: packages/feedback-gitops
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
