@@ -11,6 +11,7 @@ interface Env {
   API_KEY: string;
   ADMIN_TOKEN?: string;
   AI?: Ai;
+  CANCELLATIONS?: KVNamespace;
 }
 
 interface GitHubIssueSummary {
@@ -67,7 +68,7 @@ interface PullRequestSummary {
   agentWorkUpdatedAt: string | null;
 }
 
-type IssueActionId = "execute" | "close" | "reopen";
+type IssueActionId = "execute" | "hold" | "close" | "reopen";
 type PullRequestActionId = "merge" | "cancel_merge" | "close" | "reopen";
 
 interface GitHubAction {
@@ -94,6 +95,7 @@ interface ErrorPayload {
 
 interface SuccessPayload {
   success: true;
+  submissionId?: string;
 }
 
 interface GraphQLResponse<T> {
@@ -841,6 +843,9 @@ function deriveIssueActions(issueState: "open" | "closed", labels: string[]): Gi
   const actions: GitHubAction[] = [];
   if (issueState === "open" && !labels.includes("agent-execute")) {
     actions.push({ id: "execute", label: "Execute" });
+    if (labels.includes("agent-policy-auto-merge")) {
+      actions.push({ id: "hold", label: "Hold" });
+    }
   }
   if (issueState === "open") {
     actions.push({ id: "close", label: "Close" });
@@ -1126,6 +1131,28 @@ async function executeAction(env: Env, issueNumber: number, target: "issue" | "p
       await assignIssueToCopilot(env, issueNumber);
       return { pullRequest: null };
     }
+    if (action === "hold") {
+      const issueResponse = await githubRequest(env, `/issues/${issueNumber}`);
+      if (!issueResponse.ok) {
+        const text = await issueResponse.text();
+        throw new Error(`GitHub issue read failed (${issueResponse.status}): ${text}`);
+      }
+      const issue = await issueResponse.json() as { labels: Array<{ name?: string }> };
+      const labels = issue.labels.map((l) => l.name).filter((n): n is string => Boolean(n));
+      const nextLabels = labels.filter((l) => l !== "agent-policy-auto-merge");
+      if (!nextLabels.includes("agent-policy-manual-merge")) {
+        nextLabels.push("agent-policy-manual-merge");
+      }
+      const patchResponse = await githubRequest(env, `/issues/${issueNumber}`, {
+        method: "PATCH",
+        body: JSON.stringify({ labels: nextLabels }),
+      });
+      if (!patchResponse.ok) {
+        const text = await patchResponse.text();
+        throw new Error(`GitHub issue update failed (${patchResponse.status}): ${text}`);
+      }
+      return { pullRequest: null };
+    }
     if (action === "close") {
       await setIssueState(env, issueNumber, "closed");
       return { pullRequest: null };
@@ -1203,7 +1230,7 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/widget.js") {
       const repo = `${env.GITHUB_REPO_OWNER}/${env.GITHUB_REPO_NAME}`;
-      const script = generateWidgetScript(`${url.origin}/api/issue`, repo, []);
+      const script = generateWidgetScript(`${url.origin}/api/issue`, repo, [], env.GITHUB_REPO_NAME);
       return new Response(script, {
         headers: {
           "Content-Type": "application/javascript; charset=utf-8",
@@ -1238,6 +1265,17 @@ export default {
         return json(errorPayload("Invalid submission payload", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
       }
 
+      const submissionId = crypto.randomUUID();
+      submission.submissionId = submissionId;
+
+      if (env.CANCELLATIONS && submission.input.type === "audio") {
+        await env.CANCELLATIONS.put(
+          `sub:${submissionId}`,
+          (submission.input as { audioKey: string }).audioKey,
+          { expirationTtl: 600 },
+        );
+      }
+
       try {
         await env.FEEDBACK_QUEUE.send(submission);
       } catch (err) {
@@ -1245,7 +1283,7 @@ export default {
         return json(errorPayload("Failed to enqueue feedback", "QUEUE_ERROR"), { status: 500, headers: corsHeaders });
       }
 
-      return json({ success: true } satisfies SuccessPayload, { headers: corsHeaders });
+      return json({ success: true, submissionId } satisfies SuccessPayload, { headers: corsHeaders });
     }
 
     if (request.method === "GET" && url.pathname === "/api/issues") {
@@ -1339,6 +1377,37 @@ export default {
       }
     }
 
+    if (request.method === "POST" && url.pathname === "/api/cancel") {
+      if (!isAuthorizedRequest(request, env)) {
+        return json(errorPayload("Unauthorized", "UNAUTHORIZED"), { status: 401, headers: corsHeaders });
+      }
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json(errorPayload("Invalid JSON body", "INVALID_JSON"), { status: 400, headers: corsHeaders });
+      }
+
+      const submissionId = typeof (body as { submissionId?: unknown })?.submissionId === "string"
+        ? (body as { submissionId: string }).submissionId.trim()
+        : "";
+      if (!submissionId) {
+        return json(errorPayload("submissionId required", "VALIDATION_ERROR"), { status: 400, headers: corsHeaders });
+      }
+
+      if (env.CANCELLATIONS) {
+        const audioKey = await env.CANCELLATIONS.get(`sub:${submissionId}`);
+        if (audioKey) {
+          await env.feedback_gitops_audio.delete(audioKey).catch(() => {});
+          await env.CANCELLATIONS.delete(`sub:${submissionId}`);
+        }
+        await env.CANCELLATIONS.put(`cancel:${submissionId}`, "1", { expirationTtl: 300 });
+      }
+
+      return json({ success: true } satisfies SuccessPayload, { headers: corsHeaders });
+    }
+
     return json(errorPayload("Not Found", "NOT_FOUND"), { status: 404, headers: corsHeaders });
   },
 
@@ -1355,6 +1424,7 @@ export default {
         bucket: env.feedback_gitops_audio,
         ai: env.AI,
       },
+      cancellations: env.CANCELLATIONS,
     };
 
     const consumer = createIssueConsumer<unknown>(config);

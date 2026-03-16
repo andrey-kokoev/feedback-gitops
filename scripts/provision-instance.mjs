@@ -89,6 +89,28 @@ function createQueueIfNeeded(queueName, cwd) {
   throw new Error(`Failed to create queue '${queueName}':\n${out}`);
 }
 
+function createKvIfNeeded(kvTitle, cwd) {
+  const { status, out } = runCapture("wrangler", ["kv", "namespace", "create", kvTitle], cwd);
+  if (status === 0) {
+    // wrangler prints: id = "abc123..." or "id": "abc123..."
+    const match = out.match(/["']?id["']?\s*[:=]\s*["']([a-f0-9]{32})["']/i);
+    if (match) return match[1];
+    throw new Error(`KV namespace created but could not parse ID from output:\n${out}`);
+  }
+  if (out.toLowerCase().includes("already exists") || out.toLowerCase().includes("already taken")) {
+    console.log(`[provision] KV namespace '${kvTitle}' already exists, looking up ID...`);
+    const listResult = runCapture("wrangler", ["kv", "namespace", "list"], cwd);
+    if (listResult.status !== 0) throw new Error(`Failed to list KV namespaces:\n${listResult.out}`);
+    const jsonMatch = listResult.out.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error(`Could not parse KV namespace list output:\n${listResult.out}`);
+    const namespaces = JSON.parse(jsonMatch[0]);
+    const ns = namespaces.find((n) => n.title === kvTitle);
+    if (!ns) throw new Error(`KV namespace '${kvTitle}' not found after listing.`);
+    return ns.id;
+  }
+  throw new Error(`Failed to create KV namespace '${kvTitle}':\n${out}`);
+}
+
 function putSecret(workerName, key, value, cwd) {
   run("wrangler", ["secret", "put", key, "--name", workerName], { cwd, input: `${value}\n` });
 }
@@ -106,7 +128,7 @@ function detectRepo(targetCwd) {
 
 // --- scaffold thin wrapper ---
 
-function scaffold({ workerDir, workerName, queueName, bucketName }) {
+function scaffold({ workerDir, workerName, queueName, bucketName, kvId, kvTitle }) {
   mkdirSync(path.join(workerDir, "src"), { recursive: true });
 
   const files = {
@@ -145,6 +167,10 @@ queue = "${queueName}"
 max_batch_size = 10
 max_batch_timeout = 30
 
+[[kv_namespaces]]
+binding = "CANCELLATIONS"
+id = "${kvId}"
+
 [triggers]
 crons = ["*/5 * * * *"]
 `,
@@ -175,6 +201,23 @@ crons = ["*/5 * * * *"]
       console.log(`[provision] ${rel} already exists, skipping.`);
     }
   }
+}
+
+function patchWorkerWranglerKv(workerDir, kvId) {
+  const tomlPath = path.join(workerDir, "wrangler.toml");
+  if (!existsSync(tomlPath)) return;
+  let content = readFileSync(tomlPath, "utf8");
+  if (content.includes("CANCELLATIONS")) {
+    console.log("[provision] CANCELLATIONS KV binding already in worker wrangler.toml.");
+    return;
+  }
+  // Insert before [triggers] if present, otherwise append
+  const block = `\n[[kv_namespaces]]\nbinding = "CANCELLATIONS"\nid = "${kvId}"\n`;
+  content = content.includes("[triggers]")
+    ? content.replace("[triggers]", `${block}\n[triggers]`)
+    : content + block;
+  writeFileSync(tomlPath, content, "utf8");
+  console.log("[provision] Added CANCELLATIONS KV binding to worker wrangler.toml.");
 }
 
 // --- patch host project ---
@@ -239,6 +282,7 @@ Usage:
     [--subdir <rel-path>]           default: workers/feedback-gitops
     [--queue <queue-name>]          default: derived from worker name
     [--audio-bucket <bucket-name>]  default: derived from worker name
+    [--cancellations-kv <kv-name>]  default: feedback-gitops-<suffix>-cancellations-kv
     [--github-pat <token>]          or set GITHUB_PAT in env-file
     [--base-branch <branch>]        default: main
 `);
@@ -255,10 +299,11 @@ function main() {
   const envFile      = args["env-file"] ? path.resolve(args["env-file"].trim()) : path.join(targetCwd, ".env");
   const baseBranch   = (args["base-branch"] || "main").trim();
 
-  // Derive queue/bucket names from worker name (strip "feedback-gitops-" prefix)
+  // Derive queue/bucket/kv names from worker name (strip "feedback-gitops-" prefix)
   const suffix     = workerName.replace(/^feedback-gitops-/, "");
   const queueName  = (args.queue || `feedback-queue-${suffix}`).trim();
   const bucketName = (args["audio-bucket"] || `feedback-gitops-audio-${suffix}`).trim();
+  const kvTitle    = (args["cancellations-kv"] || `feedback-gitops-${suffix}-cancellations-kv`).trim();
 
   // Repo: explicit arg → auto-detect from host wrangler.toml
   const repoSpec = (args.repo || detectRepo(targetCwd) || "").trim();
@@ -270,28 +315,40 @@ function main() {
   // Secrets: env file → CLI arg
   const env        = parseEnvFile(envFile);
   const workerEnv  = existsSync(path.join(workerDir, ".env")) ? parseEnvFile(path.join(workerDir, ".env")) : {};
-  const apiKey     = env.AGENT_CHANGE_REQUEST_API_KEY || env.API_KEY || randomBytes(32).toString("hex");
-  const adminToken = env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN || env.ADMIN_TOKEN || randomBytes(24).toString("hex");
+  const apiKey     = env.AGENT_CHANGE_REQUEST_API_KEY || env.API_KEY || workerEnv.API_KEY || randomBytes(32).toString("hex");
+  const adminToken = env.AGENT_CHANGE_REQUEST_ADMIN_TOKEN || env.ADMIN_TOKEN || workerEnv.ADMIN_TOKEN || randomBytes(24).toString("hex");
   const githubPat  = (args["github-pat"] || workerEnv.GITHUB_PAT || env.GITHUB_PAT || "").trim();
   if (!githubPat) throw new Error("GITHUB_PAT required. Pass --github-pat or set it in env-file.");
 
-  // 1. Scaffold
+  // 1. KV namespace (needed before scaffold so ID is baked into wrangler.toml)
+  console.log(`\n[provision] Ensuring KV namespace '${kvTitle}'...`);
+  const kvId = createKvIfNeeded(kvTitle, targetCwd);
+
+  // 2. Scaffold
   console.log(`\n[provision] Scaffolding ${workerName} in ${workerDir}`);
-  scaffold({ workerDir, workerName, queueName, bucketName });
+  scaffold({ workerDir, workerName, queueName, bucketName, kvId, kvTitle });
 
-  // 2. Install
+  // 3. Patch workspace (must be before install so pnpm resolves the worker as a workspace member)
+  const subdirParts = subdir.split("/");
+  const workspaceGlob = `${subdirParts[0]}/*`;
+  patchWorkspace(targetCwd, workspaceGlob);
+
+  // 4. Install from workspace root so lockfile and store are consistent
   console.log("\n[provision] Installing dependencies...");
-  run("pnpm", ["install"], { cwd: workerDir });
+  run("pnpm", ["install"], { cwd: targetCwd });
 
-  // 3. Queue
+  // 5. Queue
   console.log(`\n[provision] Ensuring queue '${queueName}'...`);
   createQueueIfNeeded(queueName, workerDir);
 
-  // 4. Deploy
+  // 4a. KV patch (handles re-runs where wrangler.toml existed before KV was added)
+  patchWorkerWranglerKv(workerDir, kvId);
+
+  // 5. Deploy
   console.log(`\n[provision] Deploying ${workerName}...`);
   run("wrangler", ["deploy"], { cwd: workerDir });
 
-  // 5. Secrets
+  // 6. Secrets
   console.log("\n[provision] Setting worker secrets...");
   const secrets = { API_KEY: apiKey, ADMIN_TOKEN: adminToken, GITHUB_PAT: githubPat, GITHUB_REPO_OWNER: owner, GITHUB_REPO_NAME: repo, GITHUB_BASE_BRANCH: baseBranch };
   for (const [key, value] of Object.entries(secrets)) {
@@ -299,14 +356,11 @@ function main() {
     putSecret(workerName, key, value, workerDir);
   }
 
-  // 6. Worker .env
+  // 7. Worker .env
   appendEnvFile(path.join(workerDir, ".env"), { GITHUB_PAT: githubPat, GITHUB_REPO_OWNER: owner, GITHUB_REPO_NAME: repo, GITHUB_BASE_BRANCH: baseBranch, API_KEY: apiKey, ADMIN_TOKEN: adminToken });
 
-  // 7. Patch host project
+  // 8. Patch host project
   console.log("\n[provision] Patching host project...");
-  const subdirParts = subdir.split("/");
-  const workspaceGlob = subdirParts.length > 1 ? `${subdirParts[0]}/*` : `${subdirParts[0]}/*`;
-  patchWorkspace(targetCwd, workspaceGlob);
   patchHostWrangler(targetCwd, workerName);
   patchHostPackageJson(targetCwd, subdir);
 
@@ -320,6 +374,7 @@ function main() {
   URL:     https://${workerName}.${process.env.CF_WORKERS_SUBDOMAIN || "<subdomain>"}.workers.dev
   Queue:   ${queueName}
   Bucket:  ${bucketName}
+  KV:      ${kvTitle} (${kvId})
   Repo:    ${repoSpec}
 
 Next steps:

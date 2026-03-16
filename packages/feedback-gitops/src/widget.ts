@@ -3,7 +3,7 @@ import { generateInlineAudioRecorderSource } from "./inline-recorder";
 /**
  * Generates the widget.js script content that gets injected into client pages.
  */
-export function generateWidgetScript(endpoint: string, defaultRepo: string, defaultLabels: string[]): string {
+export function generateWidgetScript(endpoint: string, defaultRepo: string, defaultLabels: string[], defaultStorageKey = "thoughts"): string {
   const baseEndpoint = endpoint.replace(/\/+$/, "");
   const defaultLabelsStr = defaultLabels.join(",");
   const inlineRecorderSource = generateInlineAudioRecorderSource();
@@ -13,10 +13,8 @@ export function generateWidgetScript(endpoint: string, defaultRepo: string, defa
   'use strict';
 ${inlineRecorderSource}
 
-  const ADMIN_TOKEN_STORAGE_KEY = 'thoughts:admin-token';
-  const STATE_STORAGE_KEY = 'thoughts:widget-state';
   let voiceRecorder = null;
-
+  let undoTimerHandle = null;
   function getBootstrapConfig() {
     const scriptEl = document.currentScript instanceof HTMLScriptElement ? document.currentScript : null;
     const ds = scriptEl?.dataset || {};
@@ -31,9 +29,11 @@ ${inlineRecorderSource}
       endpoint,
       issuesEndpoint: ds.issuesEndpoint || inferEndpoint('/api/issues'),
       actionEndpoint: ds.actionEndpoint || inferEndpoint('/api/action'),
+      cancelEndpoint: ds.cancelEndpoint || inferEndpoint('/api/cancel'),
       repo: ds.repo || '${defaultRepo}',
       labels: ds.labels || '${defaultLabelsStr}',
       handedness: ds.handedness === 'left' ? 'left' : 'right',
+      storageKey: ds.storageKey || '${defaultStorageKey}',
     };
   }
 
@@ -44,11 +44,11 @@ ${inlineRecorderSource}
   }
 
   function getStateStorageKey() {
-    return STATE_STORAGE_KEY;
+    return config.storageKey + ':widget-state';
   }
 
   function getAdminTokenStorageKey() {
-    return ADMIN_TOKEN_STORAGE_KEY;
+    return config.storageKey + ':admin-token';
   }
 
   function getDefaultCaptureMode() {
@@ -88,6 +88,7 @@ ${inlineRecorderSource}
     toastTimer: null,
     textCreateSuccess: false,
     voiceCreateSuccess: false,
+    lastSubmissionId: null,
     mobileSheetIssueNumber: null,
     handedness: 'right',
   };
@@ -426,7 +427,9 @@ ${inlineRecorderSource}
   #cfw-ml-head-actions { display: flex; gap: 8px; }
   #cfw-ml-head-actions button { height: 30px; padding: 0 10px; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #9bb7d3; font-size: 12px; cursor: pointer; }
   #cfw-ml-head-actions button:disabled { opacity: 0.5; }
-  #cfw-ml-body { flex: 1; overflow-y: auto; }
+  #cfw-ml-body { flex: 1; overflow-y: auto; overscroll-behavior-y: contain; }
+  #cfw-ml-ptr { height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #9ad2ff; transition: height 0.15s ease; flex-shrink: 0; }
+  #cfw-ml-ptr.cfw-ml-ptr-active { height: 36px; }
   .cfw-ml-empty { padding: 32px 14px; font-size: 13px; color: #7f9cbc; text-align: center; line-height: 1.6; }
   .cfw-ml-row { padding: 12px 14px; border-bottom: 1px solid #1a2d42; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; -webkit-tap-highlight-color: transparent; }
   .cfw-ml-row:active { background: rgba(124,187,255,0.06); }
@@ -458,6 +461,8 @@ ${inlineRecorderSource}
   .cfw-m-success-ring { width: 80px; height: 80px; border-radius: 50%; background: rgba(74,222,128,0.12); border: 2px solid rgba(74,222,128,0.35); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
   .cfw-m-success-ring svg { width: 44px; height: 44px; color: #4ade80; }
   .cfw-m-success-hint { font-size: 13px; color: #7f9cbc; }
+  .cfw-m-undo-btn { margin-top: 14px; padding: 7px 18px; border-radius: 8px; border: 1px solid rgba(124,187,255,0.35); background: transparent; color: #d9e7f7; font-size: 12px; cursor: pointer; }
+  .cfw-m-undo-btn:hover { background: rgba(124,187,255,0.08); }
   .cfw-m-voice { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px; gap: 14px; overflow: hidden; }
   .cfw-m-vstatus { border: 1px solid #2f4864; border-radius: 12px; padding: 16px; background: rgba(11,24,40,0.65); flex-shrink: 0; }
   .cfw-m-vstatus-line { font-size: 15px; color: #d9e7f7; margin-bottom: 8px; }
@@ -630,7 +635,8 @@ ${inlineRecorderSource}
         },
         body: formData,
       });
-      await readApiPayload(response, 'Failed to create voice request');
+      const voiceData = await readApiPayload(response, 'Failed to create voice request');
+      state.lastSubmissionId = (voiceData && typeof voiceData.submissionId === 'string') ? voiceData.submissionId : null;
       await resetVoiceDraft();
       if (isMobile()) {
         setVoiceCreateSuccess(true);
@@ -839,6 +845,8 @@ ${inlineRecorderSource}
 
     setListError('');
     setIssuesLoading(true);
+    const abortCtrl = new AbortController();
+    const abortTimer = window.setTimeout(() => abortCtrl.abort(), 15000);
     try {
       const params = new URLSearchParams();
       params.set('limit', '50');
@@ -848,10 +856,14 @@ ${inlineRecorderSource}
       if (Array.isArray(state.listStatusFilter) && state.listStatusFilter.length) {
         params.set('status', state.listStatusFilter.join(','));
       }
-      const response = await fetch(config.issuesEndpoint + '?' + params.toString(), {
+      const url = config.issuesEndpoint + '?' + params.toString();
+      console.log('[cfw] loadIssues fetch', url);
+      const response = await fetch(url, {
         method: 'GET',
-        headers: { 'x-admin-token': token }
+        headers: { 'x-admin-token': token },
+        signal: abortCtrl.signal,
       });
+      console.log('[cfw] loadIssues response', response.status);
       const data = await readApiPayload(response, 'Failed to load issues');
       state.issues = Array.isArray(data.issues) ? data.issues : [];
       state.issuesLoaded = true;
@@ -862,8 +874,11 @@ ${inlineRecorderSource}
       }
       persistState();
     } catch (err) {
-      setListError((err && err.message) ? err.message : 'Failed to load issues');
+      const msg = (err && err.message) ? err.message : 'Failed to load issues';
+      console.error('[cfw] loadIssues error', msg);
+      setListError(msg);
     } finally {
+      clearTimeout(abortTimer);
       setIssuesLoading(false);
     }
   }
@@ -1237,6 +1252,7 @@ ${inlineRecorderSource}
         }),
       });
       const data = await readApiPayload(response, 'Failed to create request');
+      state.lastSubmissionId = (data && typeof data.submissionId === 'string') ? data.submissionId : null;
       const issueUrl = getIssueUrlFromCreateResponse(data);
 
       state.draftTitle = '';
@@ -1295,6 +1311,8 @@ ${inlineRecorderSource}
         toastText = 'Merge requested. It will merge automatically when GitHub rules/checks are satisfied.';
       } else if (target === 'pull_request' && action === 'cancel_merge') {
         toastText = 'Merge request canceled.';
+      } else if (target === 'issue' && action === 'hold') {
+        toastText = 'Auto-processing paused. Issue switched to manual policy.';
       }
       showToast(toastText, pullRequestUrl);
       await loadIssues(true);
@@ -1641,12 +1659,63 @@ ${inlineRecorderSource}
 
   // ── Mobile-only functions ──────────────────────────────────────────────────
 
+  function stopUndoCountdown(btnId) {
+    if (undoTimerHandle !== null) {
+      window.clearInterval(undoTimerHandle);
+      undoTimerHandle = null;
+    }
+    if (btnId) {
+      const btn = document.getElementById(btnId);
+      if (btn) btn.style.display = 'none';
+    }
+  }
+
+  function startUndoCountdown(btnId) {
+    stopUndoCountdown(null);
+    const btn = document.getElementById(btnId);
+    if (!btn || !state.lastSubmissionId) return;
+    let seconds = 10;
+    btn.textContent = 'Undo (' + seconds + ')';
+    btn.style.display = '';
+    undoTimerHandle = window.setInterval(() => {
+      seconds -= 1;
+      if (seconds <= 0) {
+        stopUndoCountdown(btnId);
+      } else {
+        const b = document.getElementById(btnId);
+        if (b) b.textContent = 'Undo (' + seconds + ')';
+      }
+    }, 1000);
+  }
+
+  async function cancelSubmission(submissionId, onSuccess) {
+    if (!submissionId) return;
+    const token = readAdminToken();
+    if (!token) return;
+    try {
+      await fetch(config.cancelEndpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-admin-token': token },
+        body: JSON.stringify({ submissionId }),
+      });
+    } catch {
+      // best-effort
+    }
+    state.lastSubmissionId = null;
+    onSuccess();
+  }
+
   function setTextCreateSuccess(val) {
     state.textCreateSuccess = Boolean(val);
     const form = document.getElementById('cfw-mv-text-form');
     const success = document.getElementById('cfw-mv-text-success');
     if (form) form.style.display = val ? 'none' : '';
     if (success) success.style.display = val ? '' : 'none';
+    if (val) {
+      startUndoCountdown('cfw-mv-text-undo');
+    } else {
+      stopUndoCountdown('cfw-mv-text-undo');
+    }
   }
 
   function setVoiceCreateSuccess(val) {
@@ -1655,6 +1724,11 @@ ${inlineRecorderSource}
     const success = document.getElementById('cfw-mv-voice-success');
     if (form) form.style.display = val ? 'none' : '';
     if (success) success.style.display = val ? '' : 'none';
+    if (val) {
+      startUndoCountdown('cfw-mv-voice-undo');
+    } else {
+      stopUndoCountdown('cfw-mv-voice-undo');
+    }
   }
 
   function renderMobileIssues() {
@@ -1667,7 +1741,9 @@ ${inlineRecorderSource}
       empty.className = 'cfw-ml-empty';
       empty.textContent = !token
         ? 'Enter admin token in Settings ⚙ to view requests.'
-        : state.loadingIssues ? 'Loading…' : 'No requests yet.';
+        : state.loadingIssues ? 'Loading…'
+        : state.listError ? state.listError
+        : 'No requests yet.';
       body.appendChild(empty);
       return;
     }
@@ -1952,6 +2028,18 @@ ${inlineRecorderSource}
     el.textContent = tok ? 'Token is set: ' + tok.slice(0, 3) + '\u2026' : 'No token set.';
   }
 
+  function applyPolicyUi() {
+    const isAuto = state.draftMergePolicy === 'auto_unblocked';
+    const pm = document.getElementById('cfw-m-policy-manual');
+    const pa = document.getElementById('cfw-m-policy-auto');
+    const vm = document.getElementById('cfw-m-vpolicy-manual');
+    const va = document.getElementById('cfw-m-vpolicy-auto');
+    if (pm) pm.classList.toggle('active', !isAuto);
+    if (pa) pa.classList.toggle('active', isAuto);
+    if (vm) vm.classList.toggle('active', !isAuto);
+    if (va) va.classList.toggle('active', isAuto);
+  }
+
   function setMobileTab(tab) {
     state.activeTab = tab;
     ['text', 'voice', 'list', 'settings'].forEach((t) => {
@@ -2004,6 +2092,7 @@ ${inlineRecorderSource}
       + '</div>'
       + '<div id="cfw-mv-text-success" class="cfw-m-success" style="display:none">'
       + SUCCESS_SCREEN('Tap to submit another')
+      + '<button id="cfw-mv-text-undo" class="cfw-m-undo-btn" style="display:none">Undo</button>'
       + '</div>';
 
     const mvVoice = document.createElement('div');
@@ -2025,6 +2114,7 @@ ${inlineRecorderSource}
       + '</div>'
       + '<div id="cfw-mv-voice-success" class="cfw-m-success" style="display:none">'
       + SUCCESS_SCREEN('Tap to record another')
+      + '<button id="cfw-mv-voice-undo" class="cfw-m-undo-btn" style="display:none">Undo</button>'
       + '</div>';
 
     const mvList = document.createElement('div');
@@ -2039,6 +2129,7 @@ ${inlineRecorderSource}
       + '</div>'
       + '</div>'
       + '<div id="cfw-ml-error" class="cfw-error"></div>'
+      + '<div id="cfw-ml-ptr"></div>'
       + '<div id="cfw-ml-body"></div>';
 
     const mvSettings = document.createElement('div');
@@ -2152,6 +2243,7 @@ ${inlineRecorderSource}
     mobileLauncher.onclick = () => {
       mobileLauncher.style.display = 'none';
       root.style.display = 'flex';
+      if (!readAdminToken()) setMobileTab('settings');
     };
 
     const swipeHint = document.createElement('div');
@@ -2165,7 +2257,7 @@ ${inlineRecorderSource}
     document.body.appendChild(mobileLauncher);
     document.body.appendChild(swipeHint);
 
-    const HINT_SHOWN_KEY = 'thoughts:swipe-hint-shown';
+    const HINT_SHOWN_KEY = config.storageKey + ':swipe-hint-shown';
     if (!localStorage.getItem(HINT_SHOWN_KEY)) {
       localStorage.setItem(HINT_SHOWN_KEY, '1');
       setTimeout(() => {
@@ -2204,17 +2296,6 @@ ${inlineRecorderSource}
       updateMobileClearBtn();
     };
 
-    function applyPolicyUi() {
-      const isAuto = state.draftMergePolicy === 'auto_unblocked';
-      const pm = document.getElementById('cfw-m-policy-manual');
-      const pa = document.getElementById('cfw-m-policy-auto');
-      const vm = document.getElementById('cfw-m-vpolicy-manual');
-      const va = document.getElementById('cfw-m-vpolicy-auto');
-      if (pm) pm.classList.toggle('active', !isAuto);
-      if (pa) pa.classList.toggle('active', isAuto);
-      if (vm) vm.classList.toggle('active', !isAuto);
-      if (va) va.classList.toggle('active', isAuto);
-    }
     const pm = document.getElementById('cfw-m-policy-manual');
     if (pm) pm.onclick = () => { state.draftMergePolicy = 'manual'; applyPolicyUi(); };
     const pa = document.getElementById('cfw-m-policy-auto');
@@ -2231,6 +2312,8 @@ ${inlineRecorderSource}
 
     const textSuccess = document.getElementById('cfw-mv-text-success');
     if (textSuccess) textSuccess.onclick = () => { setTextCreateSuccess(false); };
+    const textUndo = document.getElementById('cfw-mv-text-undo');
+    if (textUndo) textUndo.onclick = (e) => { e.stopPropagation(); void cancelSubmission(state.lastSubmissionId, () => setTextCreateSuccess(false)); };
 
     const vrecord = document.getElementById('cfw-mv-vrecord');
     if (vrecord) vrecord.onclick = () => toggleVoiceRecording();
@@ -2241,11 +2324,51 @@ ${inlineRecorderSource}
 
     const voiceSuccess = document.getElementById('cfw-mv-voice-success');
     if (voiceSuccess) voiceSuccess.onclick = () => { setVoiceCreateSuccess(false); };
+    const voiceUndo = document.getElementById('cfw-mv-voice-undo');
+    if (voiceUndo) voiceUndo.onclick = (e) => { e.stopPropagation(); void cancelSubmission(state.lastSubmissionId, () => setVoiceCreateSuccess(false)); };
 
     const filterBtn = document.getElementById('cfw-ml-filter-btn');
     if (filterBtn) filterBtn.onclick = () => openMobileFilterSheet();
     const refreshBtn = document.getElementById('cfw-ml-refresh-btn');
     if (refreshBtn) refreshBtn.onclick = () => { void loadIssues(true).then(() => renderMobileIssues()); };
+
+    const mlBody = document.getElementById('cfw-ml-body');
+    const mlPtr = document.getElementById('cfw-ml-ptr');
+    if (mlBody && mlPtr) {
+      const PTR_THRESHOLD = 56;
+      let ptrStartY = 0;
+      let ptrActive = false;
+      mlBody.addEventListener('touchstart', (e) => {
+        if (mlBody.scrollTop === 0) { ptrStartY = e.touches[0].clientY; ptrActive = true; }
+      }, { passive: true });
+      mlBody.addEventListener('touchmove', (e) => {
+        if (!ptrActive) return;
+        const dy = e.touches[0].clientY - ptrStartY;
+        if (dy > 0) {
+          mlPtr.classList.add('cfw-ml-ptr-active');
+          mlPtr.textContent = dy > PTR_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
+        } else {
+          ptrActive = false;
+          mlPtr.classList.remove('cfw-ml-ptr-active');
+        }
+      }, { passive: true });
+      mlBody.addEventListener('touchend', (e) => {
+        if (!ptrActive) return;
+        const dy = e.changedTouches[0].clientY - ptrStartY;
+        ptrActive = false;
+        if (dy > PTR_THRESHOLD) {
+          mlPtr.textContent = 'Refreshing…';
+          void loadIssues(true).then(() => {
+            renderMobileIssues();
+            mlPtr.classList.remove('cfw-ml-ptr-active');
+            mlPtr.textContent = '';
+          });
+        } else {
+          mlPtr.classList.remove('cfw-ml-ptr-active');
+          mlPtr.textContent = '';
+        }
+      }, { passive: true });
+    }
 
     const tokenUpdate = document.getElementById('cfw-m-token-update');
     if (tokenUpdate) tokenUpdate.onclick = () => { promptAdminToken(); updateMobileTokenStatus(); void loadIssues(true).then(() => renderMobileIssues()); };

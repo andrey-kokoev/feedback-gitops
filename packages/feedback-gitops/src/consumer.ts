@@ -12,6 +12,7 @@ export interface AudioFeedbackInput {
 }
 
 export interface FeedbackSubmission {
+  submissionId?: string;
   input: TextFeedbackInput | AudioFeedbackInput;
   url?: string;
   userAgent?: string;
@@ -31,6 +32,7 @@ export interface ConsumerConfig {
     bucket: R2Bucket;
     ai?: Ai;
   };
+  cancellations?: KVNamespace;
 }
 
 interface GitHubIssuePayload {
@@ -82,6 +84,17 @@ function isValidSubmission(value: unknown): value is FeedbackSubmission {
 async function processMessage(payload: FeedbackSubmission, config: ConsumerConfig): Promise<void> {
   if (!isValidSubmission(payload)) {
     throw new Error("Invalid submission payload");
+  }
+
+  if (payload.submissionId && config.cancellations) {
+    const tombstone = await config.cancellations.get(`cancel:${payload.submissionId}`);
+    if (tombstone !== null) {
+      console.log(`[pipeline:0] submission ${payload.submissionId} cancelled, skipping`);
+      if (payload.input.type === "audio") {
+        await config.audio.bucket.delete(payload.input.audioKey).catch(() => {});
+      }
+      return;
+    }
   }
 
   const inputType = payload.input.type;
