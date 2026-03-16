@@ -1,16 +1,46 @@
 {
-  "name": "@feedback-gitops/worker",
-  "private": true,
-  "version": "0.0.0",
+  "name": "feedback-gitops",
+  "version": "0.1.0",
+  "description": "Turn user feedback into GitHub issues via a Cloudflare Worker queue, with a self-hosted mobile-first widget",
+  "license": "MIT",
   "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "build": "tsup",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "peerDependencies": {
+    "@cloudflare/workers-types": ">=4"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260107.0",
+    "tsup": "^8.4.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.66.0"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/global-maxima/feedback-gitops.git"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "feedback",
+    "github-issues",
+    "widget"
+  ]
 }
