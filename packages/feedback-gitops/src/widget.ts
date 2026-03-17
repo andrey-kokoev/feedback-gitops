@@ -1213,8 +1213,8 @@ ${inlineRecorderSource}
     const token = requireAdminToken();
     if (!token) return;
 
-    const titleEl = document.getElementById('cfw-title') || document.getElementById('cfw-m-title');
-    const descriptionEl = document.getElementById('cfw-description') || document.getElementById('cfw-m-description');
+    const titleEl = document.getElementById(isMobile() ? 'cfw-m-title' : 'cfw-title');
+    const descriptionEl = document.getElementById(isMobile() ? 'cfw-m-description' : 'cfw-description');
     const policyEl = document.getElementById('cfw-merge-policy');
     const title = titleEl ? String(titleEl.value || '').trim() : '';
     const description = descriptionEl ? String(descriptionEl.value || '').trim() : '';
