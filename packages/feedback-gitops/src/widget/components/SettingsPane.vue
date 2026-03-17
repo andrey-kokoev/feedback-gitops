@@ -39,6 +39,23 @@
         >Right &#9654;</button>
       </div>
       <p class="cfw-m-settings-note">Or swipe the open button left or right.</p>
+
+      <h3>Panel position</h3>
+      <div class="cfw-m-hand-toggle">
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.panelSnap === 'top' }"
+          type="button"
+          @click="store.panelSnap = 'top'; persist()"
+        >&#9650; Top</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.panelSnap === 'bottom' }"
+          type="button"
+          @click="store.panelSnap = 'bottom'; persist()"
+        >Bottom &#9660;</button>
+      </div>
+      <p class="cfw-m-settings-note">Or swipe the panel handle up or down.</p>
     </div>
   </div>
 </template>
