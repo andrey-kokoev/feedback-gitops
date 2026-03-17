@@ -20,7 +20,7 @@ export const useWidgetStore = defineStore('widget', () => {
   const mobileTab = ref<MobileTab>('text')
   const captureMode = ref<CaptureMode>('text')
   const handedness = ref<'left' | 'right'>('right')
-  const panelSnap = ref<'top' | 'bottom'>('bottom')
+  const panelSnap = ref<'top' | 'middle' | 'bottom'>('bottom')
   const adminToken = ref('')
   const draftSettingsOpen = ref(false)
 

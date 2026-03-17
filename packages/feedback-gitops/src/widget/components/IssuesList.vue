@@ -1,5 +1,6 @@
 <template>
   <div id="cfw-mv-list" :class="['cfw-mv', { active: store.mobileTab === 'list' }]">
+    <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
     <div class="cfw-tab-body">
     <div id="cfw-ml-head">
       <span id="cfw-ml-head-title">Requests</span>
@@ -48,6 +49,7 @@
 import { ref, computed } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useAdminToken } from '../composables/useAdminToken'
+import { usePanelSwipe } from '../composables/usePanelSwipe'
 import type { IssueListItem } from '../types'
 
 const emit = defineEmits<{
@@ -58,6 +60,7 @@ const emit = defineEmits<{
 
 const store = useWidgetStore()
 const { readToken } = useAdminToken()
+const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
 
 const PTR_THRESHOLD = 56
 const ptrActive = ref(false)

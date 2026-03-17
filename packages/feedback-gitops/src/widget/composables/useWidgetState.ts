@@ -45,7 +45,7 @@ export function useWidgetState() {
       store.draftSettingsOpen = Boolean(saved.draftSettingsOpen)
 
       if (saved.handedness === 'left' || saved.handedness === 'right') store.handedness = saved.handedness
-      if (saved.panelSnap === 'top' || saved.panelSnap === 'bottom') store.panelSnap = saved.panelSnap
+      if (saved.panelSnap === 'top' || saved.panelSnap === 'middle' || saved.panelSnap === 'bottom') store.panelSnap = saved.panelSnap
     } catch { /* */ }
   }
 

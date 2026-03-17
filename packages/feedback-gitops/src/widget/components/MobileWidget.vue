@@ -4,7 +4,7 @@
     id="cfw-mobile-launcher"
     type="button"
     aria-label="Open feedback widget"
-    :style="launcherStyle"
+    :class="{ 'panel-left': store.handedness === 'left' }"
     v-show="!mobileOpen"
     @touchstart.passive="onLauncherTouchStart"
     @touchend="onLauncherTouchEnd"
@@ -29,17 +29,13 @@
   <div
     id="cfw-mobile"
     v-show="mobileOpen"
-    :class="{ 'panel-left': store.handedness === 'left', 'snap-top': store.panelSnap === 'top' }"
+    :class="{ 'panel-left': store.handedness === 'left' }"
     :style="panelStyle"
   >
-    <div
-      id="cfw-panel-handle"
-      @touchstart.passive="onPanelTouchStart"
-      @touchend="onPanelTouchEnd"
-    ><div id="cfw-panel-handle-bar"></div></div>
-    <div id="cfw-mobile-body" :class="{ 'snap-bottom': store.panelSnap === 'bottom' }">
+    <div id="cfw-mobile-body" :class="{ 'snap-bottom': store.panelSnap === 'bottom', 'snap-top': store.panelSnap === 'top', 'snap-middle': store.panelSnap === 'middle' }">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
+        <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
         <div class="cfw-tab-body">
         <template v-if="!store.textCreateSuccess">
           <div id="cfw-mv-text-form" class="cfw-mf">
@@ -76,6 +72,7 @@
 
       <!-- Voice tab -->
       <div id="cfw-mv-voice" :class="['cfw-mv', { active: store.mobileTab === 'voice' }]">
+        <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
         <div class="cfw-tab-body">
         <template v-if="!store.voiceCreateSuccess">
           <div id="cfw-mv-voice-form" class="cfw-m-voice">
@@ -221,6 +218,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import { useAdminToken } from '../composables/useAdminToken'
+import { usePanelSwipe } from '../composables/usePanelSwipe'
 import { useApi } from '../composables/useApi'
 import { useAudioRecorder } from '../composables/useAudioRecorder'
 import TextForm from './TextForm.vue'
@@ -234,6 +232,7 @@ import type { IssueListItem } from '../types'
 const store = useWidgetStore()
 const { persist } = useWidgetState()
 const { readToken, requireToken } = useAdminToken()
+const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
 const { loadIssues: apiLoadIssues, submitText, submitVoice, cancelSubmission, mapActionError, getIssueUrlFromCreateResponse } = useApi()
 
 const mobileOpen = ref(false)
@@ -255,12 +254,6 @@ let voiceTimerHandle: ReturnType<typeof setInterval> | null = null
 
 // Launcher swipe
 let swipeStartX = 0
-let panelSwipeStartY = 0
-
-const launcherStyle = computed(() => {
-  const isLeft = store.handedness === 'left'
-  return { left: isLeft ? '10px' : '', right: isLeft ? '' : '10px', bottom: '20px' }
-})
 
 const panelStyle = computed(() => ({
   display: 'flex',
@@ -301,21 +294,6 @@ function onLauncherTouchEnd(e: TouchEvent) {
     applyHandedness(dx < 0 ? 'left' : 'right')
     e.preventDefault()
     return
-  }
-}
-
-function onPanelTouchStart(e: TouchEvent) {
-  panelSwipeStartY = e.touches[0].clientY
-}
-
-function onPanelTouchEnd(e: TouchEvent) {
-  const dy = e.changedTouches[0].clientY - panelSwipeStartY
-  if (dy > 40 && store.panelSnap === 'top') {
-    store.panelSnap = 'bottom'
-    persist()
-  } else if (dy < -40 && store.panelSnap === 'bottom') {
-    store.panelSnap = 'top'
-    persist()
   }
 }
 

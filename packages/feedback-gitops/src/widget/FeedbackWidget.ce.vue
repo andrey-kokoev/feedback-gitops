@@ -33,21 +33,25 @@ onMounted(() => {
 /* ─── Widget ─────────────────────────────────────────────────────────────── */
 #cfw-desktop-backdrop { display: none; }
 #cfw-mobile { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; overflow: hidden; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
-#cfw-panel-handle { height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
-#cfw-panel-handle-bar { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; }
-#cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
+.cfw-panel-handle { height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+.cfw-panel-handle-bar { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; }
+#cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; right: 10px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
+#cfw-mobile-launcher.panel-left { left: 10px; right: auto; }
 #cfw-mobile-launcher svg { width: 14px; height: 14px; }
 #cfw-mobile-body { flex: 1; overflow: hidden; position: relative; }
 .cfw-mv { position: absolute; inset: 0; display: none; flex-direction: column; overflow: hidden; }
 .cfw-mv.active { display: flex; }
 /* Single wrapper — only element that changes for snap positioning */
 .cfw-tab-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+/* snap-bottom: both handle+content pushed to flex-end; handle sits right above content */
 #cfw-mobile-body.snap-bottom .cfw-mv { justify-content: flex-end; }
 #cfw-mobile-body.snap-bottom .cfw-tab-body { flex: 0 0 auto; max-height: 100%; }
-/* Handle repositioning: snap-top → handle moves below content, above nav */
-#cfw-mobile.snap-top #cfw-mobile-body { order: 1; }
-#cfw-mobile.snap-top #cfw-panel-handle { order: 2; }
-#cfw-mobile.snap-top #cfw-mobile-nav { order: 3; }
+/* snap-top: content at top (natural height), handle immediately below */
+#cfw-mobile-body.snap-top .cfw-tab-body { order: 0; flex: 0 0 auto; max-height: calc(100% - 28px); }
+#cfw-mobile-body.snap-top .cfw-panel-handle { order: 1; }
+/* snap-middle: content + handle centered together */
+#cfw-mobile-body.snap-middle .cfw-mv { justify-content: center; }
+#cfw-mobile-body.snap-middle .cfw-tab-body { flex: 0 0 auto; max-height: calc(100% - 28px); }
 #cfw-mobile-nav { height: 56px; display: flex; border-top: 1px solid rgba(124,187,255,0.18); background: rgba(10,17,29,0.98); flex-shrink: 0; }
 .cfw-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: #7f9cbc; cursor: pointer; font-size: 10px; padding: 0; -webkit-tap-highlight-color: transparent; }
 .cfw-nav-btn.active { color: #9ad2ff; }
@@ -143,7 +147,9 @@ onMounted(() => {
   #cfw-desktop-backdrop { display: block; position: fixed; inset: 0; z-index: 9998; background: rgba(2,6,23,0.45); backdrop-filter: blur(2px); }
   #cfw-mobile { top: 0 !important; bottom: 0 !important; width: 420px; height: 100%; border-radius: 0; border: 1px solid rgba(124,187,255,0.28); box-shadow: 0 0 40px rgba(2,7,14,0.55); left: auto; right: 0; border-left: 1px solid rgba(124,187,255,0.28); transition: none !important; }
   #cfw-mobile.panel-left { left: 0; right: auto; border-left: none; border-right: 1px solid rgba(124,187,255,0.28); }
-  #cfw-panel-handle { display: none; }
+  .cfw-panel-handle { display: none; }
+  #cfw-mobile-launcher { right: 20px; }
+  #cfw-mobile-launcher.panel-left { left: 20px; right: auto; }
   #cfw-mbs { width: 420px; border-radius: 12px 12px 0 0; left: auto; right: 0; }
   #cfw-mbs.panel-left { left: 0; right: auto; }
   #cfw-mbs-overlay { background: rgba(2,6,23,0.3); }

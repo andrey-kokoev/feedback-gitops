@@ -1,5 +1,6 @@
 <template>
   <div id="cfw-mv-settings" :class="['cfw-mv', { active: store.mobileTab === 'settings' }]">
+    <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
     <div class="cfw-tab-body">
     <div class="cfw-m-settings">
       <h3>Admin token</h3>
@@ -51,6 +52,12 @@
         >&#9650; Top</button>
         <button
           class="cfw-m-hand-btn"
+          :class="{ active: store.panelSnap === 'middle' }"
+          type="button"
+          @click="store.panelSnap = 'middle'; persist()"
+        >Middle</button>
+        <button
+          class="cfw-m-hand-btn"
           :class="{ active: store.panelSnap === 'bottom' }"
           type="button"
           @click="store.panelSnap = 'bottom'; persist()"
@@ -67,6 +74,7 @@ import { computed } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import { useAdminToken } from '../composables/useAdminToken'
+import { usePanelSwipe } from '../composables/usePanelSwipe'
 
 const emit = defineEmits<{
   handedness: [side: 'left' | 'right']
@@ -76,6 +84,7 @@ const emit = defineEmits<{
 const store = useWidgetStore()
 const { persist } = useWidgetState()
 const { readToken, writeToken, promptToken } = useAdminToken()
+const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
 
 const tokenStatus = computed(() => {
   const tok = store.adminToken
