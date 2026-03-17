@@ -48,7 +48,7 @@ onMounted(() => {
 #cfw-ml-ptr { height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #9ad2ff; transition: height 0.15s ease; flex-shrink: 0; }
 #cfw-ml-ptr.cfw-ml-ptr-active { height: 36px; }
 .cfw-ml-empty { padding: 32px 14px; font-size: 13px; color: #7f9cbc; text-align: center; line-height: 1.6; }
-.cfw-ml-row { padding: 12px 14px; border-bottom: 1px solid #1a2d42; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; -webkit-tap-highlight-color: transparent; }
+.cfw-ml-row { padding: 16px 20px; border-bottom: 1px solid #1a2d42; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; -webkit-tap-highlight-color: transparent; }
 .cfw-ml-row:active { background: rgba(124,187,255,0.06); }
 .cfw-ml-row-left { flex: 1; min-width: 0; }
 .cfw-ml-row-num { font-size: 11px; color: #7f9cbc; margin-bottom: 2px; }
