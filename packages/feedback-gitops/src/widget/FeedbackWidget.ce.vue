@@ -64,7 +64,8 @@ onMounted(() => {
 .cfw-mf { flex: 1; display: flex; flex-direction: column; padding: 14px; overflow: hidden; }
 .cfw-mf input, .cfw-mf textarea, .cfw-mf select { width: 100%; border: 1px solid #2f4864; border-radius: 8px; background: #0d1727; color: #e2f0ff; box-sizing: border-box; font-family: inherit; }
 .cfw-mf input { height: 44px; padding: 0 14px; margin-bottom: 10px; font-size: 15px; flex-shrink: 0; }
-.cfw-mf textarea { flex: 1; padding: 12px 14px; font-size: 15px; resize: none; overflow-y: auto; margin-bottom: 10px; min-height: 0; }
+.cfw-textarea-wrap { flex: 1; min-height: 0; overflow: hidden; margin-bottom: 10px; }
+.cfw-mf textarea { width: 100%; height: 130px; min-height: 130px; padding: 12px 14px; font-size: 15px; resize: none; overflow-y: hidden; margin-bottom: 0; }
 .cfw-mf input::placeholder, .cfw-mf textarea::placeholder { color: #7f9cbc; }
 .cfw-mf input:focus, .cfw-mf textarea:focus { outline: none; border-color: #4f7298; }
 .cfw-mf-policy { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; flex-shrink: 0; }

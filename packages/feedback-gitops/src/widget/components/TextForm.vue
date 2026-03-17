@@ -9,13 +9,16 @@
       maxlength="500"
       @input="onPersist"
     />
-    <textarea
-      :id="descId"
-      v-model="store.draftDescription"
-      :placeholder="'Describe the requested change...'"
-      maxlength="5000"
-      @input="onPersist"
-    ></textarea>
+    <div ref="textareaWrapRef" class="cfw-textarea-wrap">
+      <textarea
+        ref="descRef"
+        :id="descId"
+        v-model="store.draftDescription"
+        :placeholder="'Describe the requested change...'"
+        maxlength="5000"
+        @input="onDescInput"
+      ></textarea>
+    </div>
 
     <div v-if="mobile" class="cfw-mf-policy">
       <label>Merge policy</label>
@@ -94,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 
@@ -132,5 +135,31 @@ function clearDraft() {
 }
 
 const titleInputRef = ref<HTMLInputElement | null>(null)
+const descRef = ref<HTMLTextAreaElement | null>(null)
+const textareaWrapRef = ref<HTMLDivElement | null>(null)
+
+function resizeDesc() {
+  const el = descRef.value
+  const wrap = textareaWrapRef.value
+  if (!el || !wrap) return
+  el.style.height = 'auto'
+  const scrollH = el.scrollHeight
+  const maxH = wrap.clientHeight
+  if (scrollH >= maxH) {
+    el.style.height = maxH + 'px'
+    el.style.overflowY = 'auto'
+  } else {
+    el.style.height = scrollH + 'px'
+    el.style.overflowY = 'hidden'
+  }
+}
+
+function onDescInput() {
+  resizeDesc()
+  onPersist()
+}
+
+onMounted(() => resizeDesc())
+
 defineExpose({ focusTitle: () => titleInputRef.value?.focus() })
 </script>
