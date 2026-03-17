@@ -110,7 +110,7 @@ test.describe('Widget Integration Harness Mocked Tests', () => {
     })
 
     await page.goto(`${BASE_URL}/widget/integration.html`)
-    await expect(page.getByText('Setup Required')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Widget Integration Harness' })).toBeVisible()
 
     const widget = await openIntegrationActivity(page)
     await expect.poll(() => shadowTextIncludes(widget, 'Intercepted Integration Title')).toBe(true)
