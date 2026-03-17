@@ -131,9 +131,11 @@ onMounted(() => {
 /* ─── Desktop: side-panel drawer ─────────────────────────────────────────── */
 @media (min-width: 681px) {
   #cfw-desktop-backdrop { display: block; position: fixed; inset: 0; z-index: 9998; background: rgba(2,6,23,0.45); backdrop-filter: blur(2px); }
-  #cfw-mobile { top: 0 !important; bottom: 0 !important; width: 420px; height: 100%; border-radius: 0; border: 1px solid rgba(124,187,255,0.28); box-shadow: 0 0 40px rgba(2,7,14,0.55); left: auto; right: 0; transition: none !important; }
+  #cfw-mobile { top: 0 !important; bottom: 0 !important; width: 420px; height: 100%; border-radius: 0; border: 1px solid rgba(124,187,255,0.28); box-shadow: 0 0 40px rgba(2,7,14,0.55); left: auto; right: 0; border-left: 1px solid rgba(124,187,255,0.28); transition: none !important; }
+  #cfw-mobile.panel-left { left: 0; right: auto; border-left: none; border-right: 1px solid rgba(124,187,255,0.28); }
   #cfw-panel-handle { display: none; }
-  #cfw-mbs { width: 420px; border-radius: 12px 12px 0 0; }
+  #cfw-mbs { width: 420px; border-radius: 12px 12px 0 0; left: auto; right: 0; }
+  #cfw-mbs.panel-left { left: 0; right: auto; }
   #cfw-mbs-overlay { background: rgba(2,6,23,0.3); }
   #cfw-swipe-hint { display: none !important; }
 }

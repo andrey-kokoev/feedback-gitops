@@ -26,7 +26,12 @@
   <div id="cfw-desktop-backdrop" v-show="mobileOpen" @click="mobileOpen = false" />
 
   <!-- Mobile full-screen overlay -->
-  <div id="cfw-mobile" v-show="mobileOpen" :style="panelStyle">
+  <div
+    id="cfw-mobile"
+    v-show="mobileOpen"
+    :class="{ 'panel-left': store.handedness === 'left' }"
+    :style="panelStyle"
+  >
     <div
       id="cfw-panel-handle"
       @touchstart.passive="onPanelTouchStart"
@@ -254,16 +259,10 @@ const launcherStyle = computed(() => {
 })
 
 const panelStyle = computed(() => {
-  const isLeft = store.handedness === 'left'
   const isTop = store.panelSnap === 'top'
   return {
     display: 'flex',
     flexDirection: 'column' as const,
-    left: isLeft ? '0' : 'auto',
-    right: isLeft ? 'auto' : '0',
-    borderLeft: isLeft ? 'none' : undefined,
-    borderRight: isLeft ? undefined : 'none',
-    // mobile snap position (desktop overrides via media query)
     top: isTop ? '0' : 'auto',
     bottom: isTop ? 'auto' : '0',
     transition: 'top 0.25s ease, bottom 0.25s ease',
