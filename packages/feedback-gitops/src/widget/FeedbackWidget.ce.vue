@@ -28,6 +28,7 @@ onMounted(() => {
 :host { all: initial; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; }
 
 /* ─── Widget ─────────────────────────────────────────────────────────────── */
+#cfw-desktop-backdrop { display: none; }
 #cfw-mobile { position: fixed; inset: 0; z-index: 9999; flex-direction: column; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
 #cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
 #cfw-mobile-launcher svg { width: 14px; height: 14px; }
@@ -123,10 +124,12 @@ onMounted(() => {
 .cfw-is-error.active { display: block; }
 .cfw-mbs-close { width: 100%; height: 48px; border-radius: 8px; border: 1px solid #2f4864; background: transparent; color: #9bb7d3; font-size: 14px; cursor: pointer; margin-top: 8px; }
 
-/* ─── Desktop: constrain to a panel instead of full-screen ───────────────── */
+/* ─── Desktop: side-panel drawer ─────────────────────────────────────────── */
 @media (min-width: 681px) {
-  #cfw-mobile { inset: auto; bottom: 70px; right: 14px; width: 420px; height: min(680px, calc(100vh - 90px)); border-radius: 12px; border: 1px solid rgba(124,187,255,0.28); box-shadow: 0 24px 44px rgba(2,7,14,0.55); backdrop-filter: blur(10px); }
-  #cfw-mbs { left: auto; right: 14px; width: 420px; border-radius: 12px; }
+  #cfw-desktop-backdrop { display: block; position: fixed; inset: 0; z-index: 9998; background: rgba(2,6,23,0.45); backdrop-filter: blur(2px); }
+  #cfw-mobile { inset: 0 0 0 auto; width: 420px; height: 100%; border-radius: 0; border-left: 1px solid rgba(124,187,255,0.28); box-shadow: -12px 0 40px rgba(2,7,14,0.55); }
+  #cfw-mobile-launcher { bottom: 20px; right: 14px; }
+  #cfw-mbs { left: auto; right: 0; width: 420px; border-radius: 12px 12px 0 0; }
   #cfw-mbs-overlay { background: rgba(2,6,23,0.3); }
   #cfw-swipe-hint { display: none !important; }
 }

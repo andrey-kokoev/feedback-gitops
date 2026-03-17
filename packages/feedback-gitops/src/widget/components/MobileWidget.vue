@@ -22,6 +22,9 @@
     :style="swipeHintStyle"
   >&#8592; swipe &#8594;</div>
 
+  <!-- Desktop backdrop -->
+  <div id="cfw-desktop-backdrop" v-show="mobileOpen" @click="store.mobileOpen = false" />
+
   <!-- Mobile full-screen overlay -->
   <div id="cfw-mobile" v-show="mobileOpen" style="display: flex; flex-direction: column;">
     <div id="cfw-mobile-body">
