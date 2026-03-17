@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useWidgetStore } from '../stores/widget'
-import { useAdminToken } from '../composables/useAdminToken'
+import { useApi } from '../composables/useApi'
 import { usePanelSwipe } from '../composables/usePanelSwipe'
 import type { IssueListItem, SwipeActionType } from '../types'
 import IssueRow from './IssueRow.vue'
@@ -71,7 +71,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useWidgetStore()
-const { readToken } = useAdminToken()
+const { hasAccess } = useApi()
 const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
 
 const PTR_THRESHOLD = 56
@@ -85,8 +85,7 @@ const pinnedIssues = computed(() => store.issues.filter(i => !!i.pinned && isUnr
 const unpinnedIssues = computed(() => store.issues.filter(i => !i.pinned || !isUnresolved(i)))
 
 const emptyText = computed(() => {
-  const token = readToken()
-  if (!token) return 'Enter admin token in Settings \u2699 to view requests.'
+  if (!hasAccess()) return 'Authentication required to view requests.'
   if (store.loadingIssues) return 'Loading\u2026'
   if (store.listError) return store.listError
   return 'No requests yet.'

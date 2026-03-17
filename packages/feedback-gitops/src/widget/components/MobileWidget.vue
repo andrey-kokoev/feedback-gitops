@@ -183,7 +183,6 @@ import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import { usePanelSwipe } from '../composables/usePanelSwipe'
 import { useApi } from '../composables/useApi'
-import { useAdminToken } from '../composables/useAdminToken'
 import { useTextSubmission } from '../composables/useTextSubmission'
 import { useIssueSheet } from '../composables/useIssueSheet'
 import { useWidgetLauncher } from '../composables/useWidgetLauncher'
@@ -196,8 +195,7 @@ import type { SwipeActionType, IssueListItem } from '../types'
 const store = useWidgetStore()
 const { persist } = useWidgetState()
 const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
-const { loadIssues } = useApi()
-const { readToken } = useAdminToken()
+const { loadIssues, authorize } = useApi()
 
 // Feature composables
 const text = useTextSubmission()
@@ -275,10 +273,7 @@ async function onActionDone() {
 }
 
 function onLauncherClick() {
-  if (!readToken()) {
-    useAdminToken().promptToken()
-    if (!readToken()) return
-  }
+  if (!authorize()) return
   launcher.open()
   pushWidgetDepth(1)
 }
@@ -344,10 +339,7 @@ onUnmounted(() => {
 
 initPopstateAction()
 function openItem(id: string | number) {
-  if (!readToken()) {
-    useAdminToken().promptToken()
-    if (!readToken()) return
-  }
+  if (!authorize()) return
   const num = typeof id === 'string' ? parseInt(id, 10) : id
   if (!launcher.isOpen.value) {
     launcher.open()

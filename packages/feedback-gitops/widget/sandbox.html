@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Sandbox</title>
+  <style>
+    body { background: #1a2332; min-height: 100vh; }
+    .host-content { padding: 40px; color: #ccc; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="host-content">
+    <h1>Widget Sandbox</h1>
+    <p>This is the pure UX sandbox. It uses the mock adapter and does not verify auth or connect to the real backend.</p>
+    
+    <div style="margin-top: 20px; padding: 15px; background: #2a3441; border-radius: 8px; max-width: 600px;">
+      <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #fff;">Sandbox State:</label>
+      <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+        <button type="button" class="scenario-btn" data-val="default">Default</button>
+        <button type="button" class="scenario-btn" data-val="empty">Empty</button>
+        <button type="button" class="scenario-btn" data-val="comments">Comments</button>
+        <button type="button" class="scenario-btn" data-val="linked">Linked</button>
+        <button type="button" class="scenario-btn" data-val="edit">Edit</button>
+        <button type="button" class="scenario-btn" data-val="unread">Unread</button>
+        <button type="button" class="scenario-btn" data-val="loading">Loading</button>
+        <button type="button" class="scenario-btn" data-val="error">Error</button>
+      </div>
+      <p style="font-size: 0.8em; margin-top: 8px; color: #888;">Switching will instantly refresh the preview.</p>
+    </div>
+  </div>
+
+  <style>
+    .scenario-btn { background: #3b4b5e; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .scenario-btn:hover { background: #4a5a70; }
+    .scenario-btn.active { background: #3182ce; font-weight: bold; border: 2px solid #63b3ed; padding: 4px 10px; }
+  </style>
+
+  <script>
+    window.__WIDGET_CONFIG__ = {
+      storageKey: 'dev'
+    };
+
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const currentScenario = params.get('scenario') || 'default';
+    
+    function setScenario(val) {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('scenario', val);
+      window.location.assign(currentUrl.toString());
+    }
+
+    document.querySelectorAll('.scenario-btn').forEach(btn => {
+      if (btn.dataset.val === currentScenario) {
+        btn.classList.add('active');
+      }
+      btn.addEventListener('click', (e) => setScenario(e.target.dataset.val));
+    });
+  </script>
+
+  <script
+    type="module"
+    src="../src/widget/main-sandbox.ts"
+    data-storage-key="dev"
+  ></script>
+</body>
+</html>

@@ -1,39 +1,14 @@
-import { useWidgetStore } from '../stores/widget'
+import { inject } from 'vue'
+import type { WidgetAdapter } from '../core/adapter'
 
 export function useAdminToken() {
-  const store = useWidgetStore()
+  const adapter = inject<WidgetAdapter>('widget-adapter')
+  if (!adapter) throw new Error('WidgetAdapter not provided')
 
-  function storageKey() {
-    return store.config.storageKey + ':admin-token'
+  return {
+    readToken: adapter.readToken,
+    requireToken: adapter.requireToken,
+    promptToken: adapter.promptToken,
+    clearToken: adapter.clearToken,
   }
-
-  function readToken(): string {
-    try {
-      const val = localStorage.getItem(storageKey()) ?? ''
-      store.adminToken = val
-      return val
-    } catch { return '' }
-  }
-
-  function writeToken(value: string) {
-    try {
-      if (!value) localStorage.removeItem(storageKey())
-      else localStorage.setItem(storageKey(), value)
-      store.adminToken = value
-    } catch { /* */ }
-  }
-
-  function promptToken(): string {
-    const next = window.prompt('Enter admin token', readToken())
-    if (next === null) return ''
-    const token = next.trim()
-    writeToken(token)
-    return token
-  }
-
-  function requireToken(): string {
-    return readToken() || promptToken()
-  }
-
-  return { readToken, writeToken, promptToken, requireToken }
 }

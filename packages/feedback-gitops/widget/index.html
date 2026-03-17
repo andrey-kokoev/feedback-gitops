@@ -3,24 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Widget Dev Harness</title>
+  <title>Widget Dev Index</title>
   <style>
-    body { background: #1a2332; min-height: 100vh; }
-    .host-content { padding: 40px; color: #ccc; font-family: sans-serif; }
+    body { background: #1a2332; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: sans-serif; }
+    .nav-container { display: flex; gap: 20px; justify-content: center; }
+    .nav-card {
+      background: #2a3441;
+      padding: 40px;
+      border-radius: 12px;
+      text-align: center;
+      text-decoration: none;
+      color: #fff;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+      min-width: 200px;
+    }
+    .nav-card:hover { border-color: #63b3ed; transform: translateY(-2px); background: #324052; }
+    .nav-card h2 { margin-top: 0; color: #90cdf4; }
+    .nav-card p { color: #a0aec0; font-size: 0.9em; margin-bottom: 0; }
   </style>
 </head>
 <body>
-  <div class="host-content">
-    <h1>Host Page Simulation</h1>
-    <p>The feedback widget should appear as a floating button.</p>
+  <div class="nav-container">
+    <a href="/widget/sandbox.html" class="nav-card">
+      <h2>Widget Sandbox</h2>
+      <p>Pure UX. Mock Data. No Auth.</p>
+    </a>
+    <a href="/widget/integration.html" class="nav-card">
+      <h2>Widget Integration Harness</h2>
+      <p>Real Worker Backend. Requires Token.</p>
+    </a>
   </div>
-  <script
-    type="module"
-    src="../src/widget/main.ts"
-    data-endpoint="http://localhost:8787/api/issue"
-    data-repo="owner/repo"
-    data-storage-key="dev"
-    data-labels="agent-execute"
-  ></script>
+  <script type="module" src="/src/widget/_dummy_hmr.ts"></script>
 </body>
 </html>

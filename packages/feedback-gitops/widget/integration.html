@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Integration Harness</title>
+  <style>
+    body { background: #1a2332; min-height: 100vh; }
+    .host-content { padding: 40px; color: #ccc; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="host-content">
+    <h1>Widget Integration Harness</h1>
+    
+    <div style="margin-top: 20px; padding: 15px; background: #4a2e2d; border-radius: 8px; max-width: 600px; border: 1px solid #e53e3e;">
+      <h3 style="margin-top: 0; color: #fc8181;">Setup Required</h3>
+      <ul style="color: #fed7d7; line-height: 1.5; margin-bottom: 0;">
+        <li>Worker must be running on <code>localhost:8787</code> in another terminal</li>
+        <li>A valid Admin Token is required upon prompt</li>
+        <li>This harness is <strong>not</strong> for UX-only review. Use the Sandbox for UX iteration.</li>
+      </ul>
+    </div>
+    
+    <p>This is the integration harness. It connects to the real worker backend and requires an admin token.</p>
+  </div>
+  <script>
+    window.__WIDGET_CONFIG__ = {
+      endpoint: 'http://localhost:8787/api/issue',
+      repo: 'owner/repo',
+      storageKey: 'dev',
+      labels: 'agent-execute'
+    };
+  </script>
+  <script
+    type="module"
+    src="../src/widget/main-integration.ts"
+  ></script>
+</body>
+</html>

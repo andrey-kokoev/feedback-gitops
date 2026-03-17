@@ -23,9 +23,12 @@
     "build:worker": "tsc -p tsconfig.json",
     "build": "pnpm build:widget && pnpm build:worker",
     "dev": "wrangler dev",
-    "dev:widget": "vite --config widget/vite.config.ts",
+    "dev:widget": "vite --config widget/vite.config.ts --open /widget/index.html",
+    "dev:widget:sandbox": "vite --config widget/vite.config.ts --open /widget/sandbox.html",
+    "dev:widget:integration": "vite --config widget/vite.config.ts --open /widget/integration.html",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test:preview": "playwright test"
   },
   "dependencies": {
     "hono": "^4"

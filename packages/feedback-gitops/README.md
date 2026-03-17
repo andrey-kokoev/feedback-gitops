@@ -45,6 +45,41 @@ pnpm run typecheck
 pnpm run deploy
 ```
 
+### Widget Development
+
+**Recommended Workflow:**
+- UX work: `pnpm --filter feedback-gitops run dev:widget` (opens the index chooser)
+- Integration work: Run worker in one terminal, then `pnpm --filter feedback-gitops run dev:widget:integration`
+
+The widget UI has two separated development environments:
+
+- **Widget Sandbox** (`pnpm --filter feedback-gitops run dev:widget:sandbox`)
+  - URL: [http://localhost:5173/widget/sandbox.html](http://localhost:5173/widget/sandbox.html)
+  - Pure UX environment backed by local mock data. No authentication required.
+  - Features in-page scenario controls to seamlessly test specific states:
+    - `default`: Mixed data
+    - `empty`: No requests
+    - `comments`: Item with active discussion
+    - `linked`: Epic/child relationship
+    - `edit`: Item ready for editing
+    - `unread`: New unread item
+    - `loading`: Network wait
+    - `error`: Failed fetch
+
+- **Widget Integration Harness** (`pnpm --filter feedback-gitops run dev:widget:integration`)
+  - URL: [http://localhost:5173/widget/integration.html](http://localhost:5173/widget/integration.html)
+  - End-to-end harness for backend verification.
+  - Requires the core worker to be running (`pnpm --filter feedback-gitops run dev` in a parallel terminal).
+  - Verifies data against the actual Cloudflare pipeline (`http://localhost:8787`).
+### Automated Smoke Tests
+
+The repository includes automated browser smoke tests for the widget preview surfaces:
+
+- **Run all fast preview tests:** `pnpm --filter feedback-gitops run test:preview`
+  This runs deterministic Sandbox UI component tests and Integration configuration tests using mocked backend routes. It automatically starts up the necessary Vite webserver. It does *not* require a real token or the real worker.
+
+**Note:** Use Sandbox for interaction and visual work. Use Integration Harness only when validating real backend behavior.
+
 ## thoughts integration
 
 `thoughts` should call this worker via Cloudflare service binding `FEEDBACK_GITOPS`.

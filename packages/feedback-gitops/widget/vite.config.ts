@@ -4,6 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   root: resolve(__dirname, '..'),
+  publicDir: false,
   plugins: [
     vue({ customElement: true }),
   ],
@@ -15,14 +16,16 @@ export default defineConfig({
     emptyOutDir: false,
     cssCodeSplit: false,
     lib: {
-      entry: resolve(__dirname, '../src/widget/main.ts'),
+      entry: {
+        'widget-integration': resolve(__dirname, '../src/widget/main-integration.ts'),
+        'widget-sandbox': resolve(__dirname, '../src/widget/main-sandbox.ts'),
+      },
       name: 'FeedbackGitopsWidget',
-      fileName: () => 'widget.js',
-      formats: ['iife'],
+      fileName: (format, entryName) => `${entryName}.js`,
+      formats: ['es', 'cjs'],
     },
     rollupOptions: {
       output: {
-        inlineDynamicImports: true,
       },
     },
   },

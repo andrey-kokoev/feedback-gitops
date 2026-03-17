@@ -107,7 +107,7 @@ const emit = defineEmits<{
 
 const store = useWidgetStore()
 const { persist } = useWidgetState()
-const { readToken, writeToken, promptToken } = useAdminToken()
+const { readToken, clearToken, promptToken } = useAdminToken()
 const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
 
 const tokenStatus = computed(() => {
@@ -122,7 +122,7 @@ function onUpdateToken() {
 
 function onClearToken() {
   if (!window.confirm('Clear saved admin token?')) return
-  writeToken('')
+  clearToken()
   emit('token-changed')
 }
 
