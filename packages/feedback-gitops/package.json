@@ -28,7 +28,7 @@
     "dev:widget:integration": "vite --config widget/vite.config.ts --open /widget/integration.html",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json",
-    "test:preview": "playwright test"
+    "test:preview": "playwright test --config ./playwright.config.ts"
   },
   "dependencies": {
     "hono": "^4"
@@ -38,8 +38,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260107.0",
+    "@playwright/test": "^1.58.2",
     "@vitejs/plugin-vue": "^5.2.0",
     "pinia": "^2.3.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.9.3",
     "vite": "^6.2.0",
     "vue": "^3.5.0",
