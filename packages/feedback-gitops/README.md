@@ -33,6 +33,12 @@ wrangler secret put GITHUB_REPO_NAME --name feedback-gitops-thoughts
 wrangler secret put GITHUB_BASE_BRANCH --name feedback-gitops-thoughts
 ```
 
+For local `wrangler dev`, use a package-local `.dev.vars` file for development secrets, for example:
+
+```env
+ADMIN_TOKEN=dev-admin-token
+```
+
 ## Run and deploy
 
 From monorepo root:

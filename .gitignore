@@ -1,10 +1,13 @@
 node_modules
 .pnpm-store
 .wrangler
+.vscode/
 packages/*/.wrangler
+packages/*/.env
 packages/*/node_modules
 packages/*/.dev.vars
 packages/*/dist
+packages/*/playwright-report/
 .DS_Store
 packages/*/package-lock.json
 .history
