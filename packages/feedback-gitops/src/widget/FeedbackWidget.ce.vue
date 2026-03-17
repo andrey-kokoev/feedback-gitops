@@ -32,7 +32,7 @@ onMounted(() => {
 
 /* ─── Widget ─────────────────────────────────────────────────────────────── */
 #cfw-desktop-backdrop { display: none; }
-#cfw-mobile { position: fixed; inset: 0; z-index: 9999; flex-direction: column; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
+#cfw-mobile { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; overflow: hidden; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
 #cfw-panel-handle { height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
 #cfw-panel-handle-bar { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; }
 #cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
@@ -44,6 +44,10 @@ onMounted(() => {
 .cfw-tab-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 #cfw-mobile-body.snap-bottom .cfw-mv { justify-content: flex-end; }
 #cfw-mobile-body.snap-bottom .cfw-tab-body { flex: 0 0 auto; max-height: 100%; }
+/* Handle repositioning: snap-top → handle moves below content, above nav */
+#cfw-mobile.snap-top #cfw-mobile-body { order: 1; }
+#cfw-mobile.snap-top #cfw-panel-handle { order: 2; }
+#cfw-mobile.snap-top #cfw-mobile-nav { order: 3; }
 #cfw-mobile-nav { height: 56px; display: flex; border-top: 1px solid rgba(124,187,255,0.18); background: rgba(10,17,29,0.98); flex-shrink: 0; }
 .cfw-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: #7f9cbc; cursor: pointer; font-size: 10px; padding: 0; -webkit-tap-highlight-color: transparent; }
 .cfw-nav-btn.active { color: #9ad2ff; }

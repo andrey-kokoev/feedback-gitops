@@ -29,7 +29,7 @@
   <div
     id="cfw-mobile"
     v-show="mobileOpen"
-    :class="{ 'panel-left': store.handedness === 'left' }"
+    :class="{ 'panel-left': store.handedness === 'left', 'snap-top': store.panelSnap === 'top' }"
     :style="panelStyle"
   >
     <div
