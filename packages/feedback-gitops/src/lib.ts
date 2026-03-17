@@ -15,4 +15,4 @@ export type {
 
 export { generateWidgetScript } from "./widget";
 
-export { default as worker } from "./index";
+export { default as worker } from "./worker/index";

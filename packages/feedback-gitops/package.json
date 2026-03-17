@@ -22,6 +22,9 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "hono": "^4"
+  },
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4"
   },
