@@ -262,16 +262,10 @@ const launcherStyle = computed(() => {
   return { left: isLeft ? '10px' : '', right: isLeft ? '' : '10px', bottom: '20px' }
 })
 
-const panelStyle = computed(() => {
-  const isTop = store.panelSnap === 'top'
-  return {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    top: isTop ? '0' : 'auto',
-    bottom: isTop ? 'auto' : '0',
-    transition: 'top 0.25s ease, bottom 0.25s ease',
-  }
-})
+const panelStyle = computed(() => ({
+  display: 'flex',
+  flexDirection: 'column' as const,
+}))
 
 const swipeHintStyle = computed(() => {
   if (store.handedness === 'left') {

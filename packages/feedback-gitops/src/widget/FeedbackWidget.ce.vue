@@ -29,7 +29,7 @@ onMounted(() => {
 
 /* ─── Widget ─────────────────────────────────────────────────────────────── */
 #cfw-desktop-backdrop { display: none; }
-#cfw-mobile { position: fixed; left: 0; right: 0; height: 65vh; z-index: 9999; flex-direction: column; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; border-radius: 16px 16px 0 0; border: 1px solid rgba(124,187,255,0.18); box-shadow: 0 -8px 32px rgba(2,7,14,0.45); }
+#cfw-mobile { position: fixed; inset: 0; z-index: 9999; flex-direction: column; background: #0a111d; color: #d9e7f7; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; }
 #cfw-panel-handle { height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
 #cfw-panel-handle-bar { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; }
 #cfw-mobile-launcher { display: flex; position: fixed; bottom: 20px; width: 34px; height: 34px; border-radius: 6px; background: rgba(10,17,29,0.9); border: 1px solid rgba(124,187,255,0.4); color: #9ad2ff; align-items: center; justify-content: center; cursor: pointer; z-index: 9998; box-shadow: 0 8px 20px rgba(2,7,14,0.35); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; }
