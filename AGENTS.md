@@ -1,4 +1,4 @@
-# CLAUDE.md — feedback-gitops
+# AGENTS.md — feedback-gitops
 
 ## What this repo is
 
