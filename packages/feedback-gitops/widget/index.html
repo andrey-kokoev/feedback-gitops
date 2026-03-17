@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Dev Harness</title>
+  <style>
+    body { background: #1a2332; min-height: 100vh; }
+    .host-content { padding: 40px; color: #ccc; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="host-content">
+    <h1>Host Page Simulation</h1>
+    <p>The feedback widget should appear as a floating button.</p>
+  </div>
+  <script
+    type="module"
+    src="../src/widget/main.ts"
+    data-endpoint="http://localhost:8787/api/issue"
+    data-repo="owner/repo"
+    data-storage-key="dev"
+    data-labels="agent-execute"
+  ></script>
+</body>
+</html>

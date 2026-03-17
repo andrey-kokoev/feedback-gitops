@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "public"
   ],
   "exports": {
     ".": {
@@ -17,8 +18,11 @@
   "types": "./dist/lib.d.ts",
   "scripts": {
     "prepare": "tsc -p tsconfig.json",
-    "build": "tsc -p tsconfig.json",
+    "build:widget": "vite build --config widget/vite.config.ts",
+    "build:worker": "tsc -p tsconfig.json",
+    "build": "pnpm build:widget && pnpm build:worker",
     "dev": "wrangler dev",
+    "dev:widget": "vite --config widget/vite.config.ts",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json"
   },
@@ -30,7 +34,12 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260107.0",
+    "@vitejs/plugin-vue": "^5.2.0",
+    "pinia": "^2.3.0",
     "typescript": "^5.9.3",
+    "vite": "^6.2.0",
+    "vue": "^3.5.0",
+    "vue-tsc": "^2.2.0",
     "wrangler": "^4.66.0"
   },
   "publishConfig": {
