@@ -37,6 +37,7 @@ onMounted(() => {
 #cfw-mobile-body { flex: 1; overflow: hidden; position: relative; }
 .cfw-mv { position: absolute; inset: 0; display: none; flex-direction: column; overflow: hidden; }
 .cfw-mv.active { display: flex; }
+#cfw-mobile-body.snap-bottom .cfw-mv { justify-content: flex-end; }
 #cfw-mobile-nav { height: 56px; display: flex; border-top: 1px solid rgba(124,187,255,0.18); background: rgba(10,17,29,0.98); flex-shrink: 0; }
 .cfw-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: #7f9cbc; cursor: pointer; font-size: 10px; padding: 0; -webkit-tap-highlight-color: transparent; }
 .cfw-nav-btn.active { color: #9ad2ff; }

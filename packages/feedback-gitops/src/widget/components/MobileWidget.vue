@@ -32,7 +32,7 @@
       @touchstart.passive="onPanelTouchStart"
       @touchend="onPanelTouchEnd"
     ><div id="cfw-panel-handle-bar"></div></div>
-    <div id="cfw-mobile-body">
+    <div id="cfw-mobile-body" :class="{ 'snap-bottom': store.panelSnap === 'bottom' }">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
         <template v-if="!store.textCreateSuccess">
