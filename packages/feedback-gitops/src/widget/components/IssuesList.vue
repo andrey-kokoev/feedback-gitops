@@ -26,19 +26,28 @@
         {{ emptyText }}
       </div>
       <template v-else>
-        <div
-          v-for="issue in store.issues"
-          :key="issue.number"
-          class="cfw-ml-row"
-          @click="$emit('open-issue', issue)"
-        >
-          <div class="cfw-ml-row-left">
-            <div class="cfw-ml-row-num">#{{ issue.number }}</div>
-            <div class="cfw-ml-row-title">{{ issue.title }}</div>
-            <div class="cfw-ml-row-meta">{{ getIssueMeta(issue) }}</div>
-          </div>
-          <div class="cfw-ml-row-status">{{ issue.status || issue.state }}</div>
-        </div>
+        <template v-if="pinnedIssues.length">
+          <div class="cfw-ml-section-label">Pinned</div>
+          <IssueRow
+            v-for="issue in pinnedIssues"
+            :key="issue.number"
+            :issue="issue"
+            @open-issue="$emit('open-issue', $event)"
+            @swipe-action="a => $emit('swipe-action', a, issue)"
+            @edit-issue="$emit('edit-issue', issue)"
+          />
+        </template>
+        <template v-if="unpinnedIssues.length">
+          <div v-if="pinnedIssues.length" class="cfw-ml-section-label">Activity</div>
+          <IssueRow
+            v-for="issue in unpinnedIssues"
+            :key="issue.number"
+            :issue="issue"
+            @open-issue="$emit('open-issue', $event)"
+            @swipe-action="a => $emit('swipe-action', a, issue)"
+            @edit-issue="$emit('edit-issue', issue)"
+          />
+        </template>
       </template>
     </div>
     </div><!-- /cfw-tab-body -->
@@ -50,12 +59,15 @@ import { ref, computed } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useAdminToken } from '../composables/useAdminToken'
 import { usePanelSwipe } from '../composables/usePanelSwipe'
-import type { IssueListItem } from '../types'
+import type { IssueListItem, SwipeActionType } from '../types'
+import IssueRow from './IssueRow.vue'
 
 const emit = defineEmits<{
   refresh: []
   'open-issue': [issue: IssueListItem]
   'open-filter': []
+  'swipe-action': [action: SwipeActionType, issue: IssueListItem]
+  'edit-issue': [issue: IssueListItem]
 }>()
 
 const store = useWidgetStore()
@@ -68,6 +80,10 @@ const ptrText = ref('')
 let ptrStartY = 0
 let ptrTracking = false
 
+const isUnresolved = (i: IssueListItem) => !['completed', 'closed_unmerged', 'merged'].includes(i.status || '') && i.state !== 'closed'
+const pinnedIssues = computed(() => store.issues.filter(i => !!i.pinned && isUnresolved(i)))
+const unpinnedIssues = computed(() => store.issues.filter(i => !i.pinned || !isUnresolved(i)))
+
 const emptyText = computed(() => {
   const token = readToken()
   if (!token) return 'Enter admin token in Settings \u2699 to view requests.'
@@ -76,13 +92,6 @@ const emptyText = computed(() => {
   return 'No requests yet.'
 })
 
-function getIssueMeta(issue: IssueListItem): string {
-  if (issue.pullRequest?.url) {
-    return 'PR #' + issue.pullRequest.number + ' \u00b7 ' + (issue.pullRequest.state || '').toLowerCase()
-  }
-  const labels = Array.isArray(issue.labels) ? issue.labels.filter(l => !l.startsWith('agent-')) : []
-  return labels.slice(0, 2).join(', ')
-}
 
 function onTouchStart(e: TouchEvent) {
   const body = e.currentTarget as HTMLElement

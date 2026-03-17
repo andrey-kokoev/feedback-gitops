@@ -22,19 +22,17 @@ export function useWidgetState() {
       const saved = JSON.parse(raw)
       if (!saved || typeof saved !== 'object') return
 
-      // Restore mobile tab — handle legacy 'new'/'requests' values
-      if (['text', 'voice', 'list', 'settings'].includes(saved.activeTab)) {
-        store.activeTab = saved.activeTab
-        store.mobileTab = saved.activeTab
-      } else if (saved.activeTab === 'requests') {
-        store.activeTab = 'list'
+      // Restore mobile tab — handle legacy 'requests' value
+      if (['text', 'list', 'settings'].includes(saved.mobileTab)) {
+        store.mobileTab = saved.mobileTab
+      } else if (saved.mobileTab === 'requests' || saved.activeTab === 'requests') {
         store.mobileTab = 'list'
+      } else if (saved.mobileTab === 'voice') {
+        store.mobileTab = 'text' // Auto-fallback voice tab
       }
 
-      if (saved.captureMode === 'text' || saved.captureMode === 'voice') store.captureMode = saved.captureMode
       if (Array.isArray(saved.issues)) store.issues = saved.issues
       store.issuesLoaded = Boolean(saved.issuesLoaded)
-      store.panelOpen = Boolean(saved.panelOpen)
 
       if (['active', 'needs_action', 'completed', 'all'].includes(saved.listView)) store.listView = saved.listView
       if (saved.listSort === 'updated_desc' || saved.listSort === 'updated_asc') store.listSort = saved.listSort
@@ -42,29 +40,37 @@ export function useWidgetState() {
       if (typeof saved.draftTitle === 'string') store.draftTitle = saved.draftTitle
       if (typeof saved.draftDescription === 'string') store.draftDescription = normalizeLegacyDraftDescription(saved.draftDescription)
       if (saved.draftMergePolicy === 'auto_unblocked' || saved.draftMergePolicy === 'manual') store.draftMergePolicy = saved.draftMergePolicy
-      store.draftSettingsOpen = Boolean(saved.draftSettingsOpen)
 
       if (saved.handedness === 'left' || saved.handedness === 'right') store.handedness = saved.handedness
       if (saved.panelSnap === 'top' || saved.panelSnap === 'middle' || saved.panelSnap === 'bottom') store.panelSnap = saved.panelSnap
+
+      // Redesign elements
+      if (['technical_issue', 'personal_todo', 'feature_request'].includes(saved.mode)) store.mode = saved.mode
+      if (saved.swipeMapping && typeof saved.swipeMapping === 'object') {
+        store.swipeMapping = { ...store.swipeMapping, ...saved.swipeMapping }
+      }
+      if (saved.itemViews && typeof saved.itemViews === 'object') {
+        store.itemViews = { ...store.itemViews, ...saved.itemViews }
+      }
     } catch { /* */ }
   }
 
   function persist() {
     try {
       localStorage.setItem(storageKey(), JSON.stringify({
-        activeTab: store.activeTab,
-        captureMode: store.captureMode,
+        mobileTab: store.mobileTab,
         issues: store.issues,
         issuesLoaded: store.issuesLoaded,
-        panelOpen: store.panelOpen,
         listView: store.listView,
         listSort: store.listSort,
         draftTitle: store.draftTitle,
         draftDescription: store.draftDescription,
         draftMergePolicy: store.draftMergePolicy,
-        draftSettingsOpen: store.draftSettingsOpen,
         handedness: store.handedness,
         panelSnap: store.panelSnap,
+        mode: store.mode,
+        swipeMapping: store.swipeMapping,
+        itemViews: store.itemViews,
       }))
     } catch { /* */ }
   }

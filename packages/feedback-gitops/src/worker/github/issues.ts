@@ -66,6 +66,7 @@ export async function listIssues(env: Env, limit: number, options: IssueListOpti
   const managedIssues: Array<{
     number: number;
     title: string;
+    body: string;
     state: "open" | "closed";
     url: string;
     updatedAt: string;
@@ -97,6 +98,7 @@ export async function listIssues(env: Env, limit: number, options: IssueListOpti
         return {
           number: issue.number,
           title: issue.title,
+          body,
           state: issue.state === "closed" ? "closed" as const : "open" as const,
           url: issue.html_url,
           updatedAt: issue.updated_at,
@@ -193,8 +195,19 @@ export async function setIssueState(env: Env, issueNumber: number, state: "open"
   }
 }
 
-export async function executeAction(env: Env, issueNumber: number, target: "issue" | "pull_request", action: string): Promise<{ pullRequest: PullRequestSummary | null }> {
+export async function executeAction(env: Env, issueNumber: number, target: "issue" | "pull_request", action: string, payload?: { title?: string, body?: string }): Promise<{ pullRequest: PullRequestSummary | null }> {
   if (target === "issue") {
+    if (action === "edit" && payload?.body !== undefined) {
+      const patchResponse = await githubRequest(env, `/issues/${issueNumber}`, {
+        method: "PATCH",
+        body: JSON.stringify({ body: payload.body, title: payload.title }),
+      });
+      if (!patchResponse.ok) {
+        const text = await patchResponse.text();
+        throw new Error(`GitHub issue update failed (${patchResponse.status}): ${text}`);
+      }
+      return { pullRequest: null };
+    }
     if (action === "execute") {
       await ensureExecuteLabel(env, issueNumber);
       await assignIssueToCopilot(env, issueNumber);

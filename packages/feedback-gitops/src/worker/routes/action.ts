@@ -42,7 +42,9 @@ action.post('/', async (c) => {
   }
 
   try {
-    const result = await executeAction(c.env, issueNumber, target as 'issue' | 'pull_request', act);
+    const title = typeof (body as any)?.title === 'string' ? (body as any).title : undefined;
+    const content = typeof (body as any)?.body === 'string' ? (body as any).body : undefined;
+    const result = await executeAction(c.env, issueNumber, target as 'issue' | 'pull_request', act, { title, body: content });
     return c.json({ success: true, target, action: act, pullRequest: result.pullRequest });
   } catch (err) {
     if (err instanceof ActionError) {

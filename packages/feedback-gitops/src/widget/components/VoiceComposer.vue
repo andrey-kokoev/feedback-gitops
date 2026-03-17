@@ -7,12 +7,12 @@
           id="cfw-draft-settings-toggle"
           type="button"
           class="cfw-btn cfw-btn-outline cfw-settings-toggle"
-          :aria-expanded="store.draftSettingsOpen ? 'true' : 'false'"
+          :aria-expanded="settingsOpen ? 'true' : 'false'"
           aria-controls="cfw-draft-settings"
-          @click="store.draftSettingsOpen = !store.draftSettingsOpen; persist()"
+          @click="settingsOpen = !settingsOpen"
         >&#9881;</button>
       </div>
-      <div id="cfw-draft-settings" :class="['cfw-settings-panel', { active: store.draftSettingsOpen }]">
+      <div id="cfw-draft-settings" :class="['cfw-settings-panel', { active: settingsOpen }]">
         <label class="cfw-label" for="cfw-merge-policy">Merge policy</label>
         <select id="cfw-merge-policy" class="cfw-select" v-model="store.draftMergePolicy" @change="persist">
           <option value="manual">Manual merge</option>
@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 
@@ -72,6 +72,9 @@ defineEmits<{
 
 const store = useWidgetStore()
 const { persist } = useWidgetState()
+
+// Local UI state for desktop settings panel
+const settingsOpen = ref(false)
 
 const statusLine = computed(() => {
   if (store.voiceDraftState === 'recording') return 'Recording in progress'

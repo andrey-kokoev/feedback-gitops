@@ -5,10 +5,10 @@
     type="button"
     aria-label="Open feedback widget"
     :class="{ 'panel-left': store.handedness === 'left' }"
-    v-show="!mobileOpen"
-    @touchstart.passive="onLauncherTouchStart"
-    @touchend="onLauncherTouchEnd"
-    @click="onLauncherClick"
+    v-show="!launcher.isOpen.value"
+    @touchstart.passive="launcher.onTouchStart"
+    @touchend="launcher.onTouchEnd"
+    @click="onLauncherClick()"
   >
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 112.97 2.971L8.35 17.94 4 19l1.06-4.35L16.862 3.487z"/>
@@ -18,17 +18,17 @@
   <!-- Swipe hint -->
   <div
     id="cfw-swipe-hint"
-    :class="{ visible: swipeHintVisible }"
-    :style="swipeHintStyle"
+    :class="{ visible: launcher.swipeHintVisible.value }"
+    :style="launcher.swipeHintStyle.value"
   >&#8592; swipe &#8594;</div>
 
   <!-- Desktop backdrop -->
-  <div id="cfw-desktop-backdrop" v-show="mobileOpen" @click="mobileOpen = false" />
+  <div id="cfw-desktop-backdrop" v-show="launcher.isOpen.value" @click="closeWidget(false)" />
 
   <!-- Mobile full-screen overlay -->
   <div
     id="cfw-mobile"
-    v-show="mobileOpen"
+    v-show="launcher.isOpen.value"
     :class="{ 'panel-left': store.handedness === 'left' }"
     :style="panelStyle"
   >
@@ -37,85 +37,51 @@
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
         <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
         <div class="cfw-tab-body">
-        <template v-if="!store.textCreateSuccess">
-          <div id="cfw-mv-text-form" class="cfw-mf">
-            <TextForm
-              ref="textFormRef"
-              :mobile="true"
-              title-id="cfw-m-title"
-              desc-id="cfw-m-description"
-              @create="onTextCreate"
-            />
+          <template v-if="!store.textCreateSuccess">
+            <div id="cfw-mv-text-form" class="cfw-mf">
+              <TextForm
+                ref="textFormRef"
+                :mobile="true"
+                title-id="cfw-m-title"
+                desc-id="cfw-m-description"
+                @create="text.submit"
+              />
+            </div>
+          </template>
+          <div
+            v-else
+            id="cfw-mv-text-success"
+            class="cfw-m-success"
+            @click="text.reset()"
+          >
+            <div class="cfw-m-success-ring">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div class="cfw-m-success-hint">Tap to submit another</div>
+            <button
+              v-if="text.undoSecondsLeft.value > 0 && store.lastSubmissionId"
+              id="cfw-mv-text-undo"
+              class="cfw-m-undo-btn"
+              @click.stop="text.undo()"
+            >Undo ({{ text.undoSecondsLeft.value }})</button>
           </div>
-        </template>
-        <div
-          v-else
-          id="cfw-mv-text-success"
-          class="cfw-m-success"
-          @click="store.textCreateSuccess = false; stopUndoCountdown()"
-        >
-          <div class="cfw-m-success-ring">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-            </svg>
-          </div>
-          <div class="cfw-m-success-hint">Tap to submit another</div>
-          <button
-            v-if="undoSecondsLeft > 0 && store.lastSubmissionId"
-            id="cfw-mv-text-undo"
-            class="cfw-m-undo-btn"
-            @click.stop="onUndoText"
-          >Undo ({{ undoSecondsLeft }})</button>
         </div>
-        </div><!-- /cfw-tab-body -->
       </div>
 
-      <!-- Voice tab -->
-      <div id="cfw-mv-voice" :class="['cfw-mv', { active: store.mobileTab === 'voice' }]">
-        <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
-        <div class="cfw-tab-body">
-        <template v-if="!store.voiceCreateSuccess">
-          <div id="cfw-mv-voice-form" class="cfw-m-voice">
-            <VoiceComposer
-              :mobile="true"
-              @toggle-recording="onToggleRecording"
-              @reset="onVoiceReset"
-              @send="onVoiceSend"
-            />
-          </div>
-        </template>
-        <div
-          v-else
-          id="cfw-mv-voice-success"
-          class="cfw-m-success"
-          @click="store.voiceCreateSuccess = false; stopUndoCountdown()"
-        >
-          <div class="cfw-m-success-ring">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-            </svg>
-          </div>
-          <div class="cfw-m-success-hint">Tap to record another</div>
-          <button
-            v-if="undoSecondsLeft > 0 && store.lastSubmissionId"
-            id="cfw-mv-voice-undo"
-            class="cfw-m-undo-btn"
-            @click.stop="onUndoVoice"
-          >Undo ({{ undoSecondsLeft }})</button>
-        </div>
-        </div><!-- /cfw-tab-body -->
-      </div>
 
       <!-- Issues list tab -->
       <IssuesList
         @refresh="loadIssues(true)"
-        @open-issue="openIssueSheet"
-        @open-filter="openFilterSheet"
+        @open-issue="onOpenIssue"
+        @open-filter="onOpenFilter"
+        @swipe-action="onSwipeAction"
       />
 
       <!-- Settings tab -->
       <SettingsPane
-        @handedness="applyHandedness"
+        @handedness="launcher.applyHandedness"
         @token-changed="onTokenChanged"
       />
     </div>
@@ -126,7 +92,7 @@
         v-if="store.handedness === 'left'"
         class="cfw-nav-btn"
         type="button"
-        @click="mobileOpen = false"
+        @click="closeWidget(false)"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5M12 5l-7 7 7 7"/>
@@ -144,22 +110,9 @@
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 112.97 2.971L8.35 17.94 4 19l1.06-4.35L16.862 3.487z"/>
         </svg>
-        <span>Text</span>
+        <span>Compose</span>
       </button>
 
-      <button
-        id="cfw-nav-voice"
-        class="cfw-nav-btn"
-        type="button"
-        :class="{ active: store.mobileTab === 'voice' }"
-        @click="setMobileTab('voice')"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1a3 3 0 013 3v8a3 3 0 01-6 0V4a3 3 0 013-3z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10a7 7 0 01-14 0M12 19v4M8 23h8"/>
-        </svg>
-        <span>Voice</span>
-      </button>
 
       <button
         id="cfw-nav-list"
@@ -171,7 +124,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
-        <span>Requests</span>
+        <span>Activity</span>
       </button>
 
       <button
@@ -192,7 +145,7 @@
         v-if="store.handedness !== 'left'"
         class="cfw-nav-btn"
         type="button"
-        @click="mobileOpen = false"
+        @click="closeWidget(false)"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5M12 5l-7 7 7 7"/>
@@ -204,72 +157,62 @@
 
   <!-- Issue detail / filter bottom sheet -->
   <IssueSheet
-    :open="sheetOpen"
-    :issue="sheetIssue"
-    :filter-mode="filterMode"
-    @close="closeSheet"
-    @action-done="onActionDone"
+    :open="sheet.sheetOpen.value"
+    :issue="sheet.sheetIssue.value"
+    :filter-mode="sheet.filterMode.value"
+    :edit-mode="sheet.editMode.value"
+    @close="onLayerClose(2)"
+    @cancel-edit="sheet.editMode.value = false"
     @filter-changed="loadIssues(true)"
+    @compose-sheet="openComposeSheet"
+    @edit-issue="onEditIssue"
+  />
+
+  <ComposeSheet
+    :open="composeOpen"
+    :mode="composeMode"
+    :issue="composeIssue"
+    @close="onLayerClose(3)"
+    @action-done="onActionDone"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
-import { useAdminToken } from '../composables/useAdminToken'
 import { usePanelSwipe } from '../composables/usePanelSwipe'
 import { useApi } from '../composables/useApi'
-import { useAudioRecorder } from '../composables/useAudioRecorder'
+import { useAdminToken } from '../composables/useAdminToken'
+import { useTextSubmission } from '../composables/useTextSubmission'
+import { useIssueSheet } from '../composables/useIssueSheet'
+import { useWidgetLauncher } from '../composables/useWidgetLauncher'
 import TextForm from './TextForm.vue'
-import type { ComponentExposed } from 'vue'
-import VoiceComposer from './VoiceComposer.vue'
-import IssuesList from './IssuesList.vue'
 import IssueSheet from './IssueSheet.vue'
 import SettingsPane from './SettingsPane.vue'
-import type { IssueListItem } from '../types'
+import ComposeSheet from './ComposeSheet.vue'
+import type { SwipeActionType, IssueListItem } from '../types'
 
 const store = useWidgetStore()
 const { persist } = useWidgetState()
-const { readToken, requireToken } = useAdminToken()
 const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
-const { loadIssues: apiLoadIssues, submitText, submitVoice, cancelSubmission, mapActionError, getIssueUrlFromCreateResponse } = useApi()
+const { loadIssues } = useApi()
+const { readToken } = useAdminToken()
 
-const mobileOpen = ref(false)
-const textFormRef = ref<ComponentExposed<typeof TextForm> | null>(null)
-const swipeHintVisible = ref(false)
+// Feature composables
+const text = useTextSubmission()
+const sheet = useIssueSheet()
+const launcher = useWidgetLauncher()
 
-// Bottom sheet state
-const sheetOpen = ref(false)
-const sheetIssue = ref<IssueListItem | null>(null)
-const filterMode = ref(false)
-
-// Undo
-const undoSecondsLeft = ref(0)
-let undoTimer: ReturnType<typeof setInterval> | null = null
-
-// Voice recorder
-const recorder = useAudioRecorder()
-let voiceTimerHandle: ReturnType<typeof setInterval> | null = null
-
-// Launcher swipe
-let swipeStartX = 0
+const textFormRef = ref<InstanceType<typeof TextForm> | null>(null)
 
 const panelStyle = computed(() => ({
   display: 'flex',
   flexDirection: 'column' as const,
 }))
 
-const swipeHintStyle = computed(() => {
-  if (store.handedness === 'left') {
-    return { left: '10px', right: '' }
-  }
-  return { right: '10px', left: '' }
-})
-
-function setMobileTab(tab: 'text' | 'voice' | 'list' | 'settings') {
+function setMobileTab(tab: 'text' | 'list' | 'settings') {
   store.mobileTab = tab
-  store.activeTab = tab
   if (tab === 'list') {
     loadIssues(false)
   }
@@ -279,207 +222,148 @@ function setMobileTab(tab: 'text' | 'voice' | 'list' | 'settings') {
   persist()
 }
 
-function applyHandedness(side: 'left' | 'right') {
-  store.handedness = side
-  persist()
+const composeOpen = ref(false)
+const composeMode = ref<'comment' | 'linked_item'>('comment')
+const composeIssue = ref<IssueListItem | null>(null)
+
+function openComposeSheet(mode: 'comment' | 'linked_item', issue: IssueListItem) {
+  composeMode.value = mode
+  composeIssue.value = issue
+  composeOpen.value = true
+  pushWidgetDepth(3)
 }
 
-function onLauncherTouchStart(e: TouchEvent) {
-  swipeStartX = e.touches[0].clientX
-}
-
-function onLauncherTouchEnd(e: TouchEvent) {
-  const dx = e.changedTouches[0].clientX - swipeStartX
-  if (Math.abs(dx) >= 40) {
-    applyHandedness(dx < 0 ? 'left' : 'right')
-    e.preventDefault()
+async function onSwipeAction(action: SwipeActionType, issue: IssueListItem) {
+  if (action === 'none') return
+  
+  if (action === 'mark_viewed') {
+    store.itemViews[issue.number] = Date.now()
+    persist()
     return
   }
-}
-
-function onLauncherClick() {
-  mobileOpen.value = true
-  if (!readToken()) {
-    setMobileTab('settings')
+  
+  if (action === 'comment' || action === 'create_linked_item') {
+    openComposeSheet(action as any, issue)
+    return
   }
-}
-
-// Issues loading
-async function loadIssues(force: boolean) {
-  await apiLoadIssues(force)
-  persist()
-}
-
-// Text submission
-async function onTextCreate(execute: boolean) {
-  if (store.creating) return
-  const title = store.draftTitle.trim()
-  if (!title) { store.createError = 'Please provide title.'; return }
-  store.createError = ''
-  store.creating = true
+  
   try {
-    const data = await submitText(title, store.draftDescription.trim(), execute)
-    store.lastSubmissionId = typeof data?.submissionId === 'string' ? data.submissionId : null
-    store.lastTextTitle = title
-    store.lastTextDescription = store.draftDescription
-    store.draftTitle = ''
-    store.draftDescription = ''
-    store.textCreateSuccess = true
-    startUndoCountdown()
-    void loadIssues(true)
-    persist()
+    await useApi().executeAction(issue.number, action, 'issue')
+    await loadIssues(true)
   } catch (err) {
-    store.createError = err instanceof Error ? err.message : 'Failed to create request'
-  } finally {
-    store.creating = false
+    console.warn('Action failed', err)
   }
 }
 
-// Voice
-function stopVoiceTimer() {
-  if (voiceTimerHandle !== null) { clearInterval(voiceTimerHandle); voiceTimerHandle = null }
-}
-function startVoiceTimer() {
-  stopVoiceTimer()
-  voiceTimerHandle = setInterval(() => { store.voiceDraftDurationMs += 1000; persist() }, 1000)
+function onEditIssue(issue: IssueListItem) {
+  sheet.openIssue(issue, true)
+  pushWidgetDepth(2)
 }
 
-async function onToggleRecording() {
-  store.createError = ''
-  try {
-    if (store.voiceDraftState === 'recording') {
-      await recorder.pause()
-      store.voiceDraftState = 'paused'
-      store.voiceDraftReady = recorder.hasContent.value
-      stopVoiceTimer()
-    } else {
-      await recorder.start()
-      store.voiceDraftState = 'recording'
-      store.voiceDraftReady = recorder.hasContent.value
-      startVoiceTimer()
-    }
-    persist()
-  } catch (err) {
-    store.createError = err instanceof Error ? err.message : 'Failed to access microphone'
-  }
+function onOpenIssue(issue: IssueListItem) {
+  sheet.openIssue(issue)
+  pushWidgetDepth(2)
 }
 
-async function onVoiceReset() {
-  stopVoiceTimer()
-  await recorder.reset()
-  store.voiceDraftState = 'idle'
-  store.voiceDraftReady = false
-  store.voiceDraftDurationMs = 0
-  store.createError = ''
-  persist()
-}
-
-async function onVoiceSend() {
-  if (!store.voiceDraftReady) return
-  const blob = await recorder.exportRecording()
-  if (!blob || blob.size < 1) { store.createError = 'No recorded audio available yet.'; return }
-  store.createError = ''
-  store.creating = true
-  try {
-    const data = await submitVoice(blob, recorder.getMimeType(), store.voiceDraftDurationMs)
-    store.lastSubmissionId = typeof data?.submissionId === 'string' ? data.submissionId : null
-    await onVoiceReset()
-    store.voiceCreateSuccess = true
-    startUndoCountdown()
-    void loadIssues(true)
-    persist()
-  } catch (err) {
-    store.createError = err instanceof Error ? err.message : 'Failed to submit voice request'
-  } finally {
-    store.creating = false
-  }
-}
-
-// Undo countdown
-function stopUndoCountdown() {
-  if (undoTimer !== null) { clearInterval(undoTimer); undoTimer = null }
-  undoSecondsLeft.value = 0
-}
-
-function startUndoCountdown() {
-  stopUndoCountdown()
-  if (!store.lastSubmissionId) return
-  undoSecondsLeft.value = 10
-  undoTimer = setInterval(() => {
-    undoSecondsLeft.value -= 1
-    if (undoSecondsLeft.value <= 0) stopUndoCountdown()
-  }, 1000)
-}
-
-async function onUndoText() {
-  if (!store.lastSubmissionId) return
-  const id = store.lastSubmissionId
-  await cancelSubmission(id)
-  store.lastSubmissionId = null
-  store.textCreateSuccess = false
-  store.draftTitle = store.lastTextTitle
-  store.draftDescription = store.lastTextDescription
-  stopUndoCountdown()
-  persist()
-}
-
-async function onUndoVoice() {
-  if (!store.lastSubmissionId) return
-  const id = store.lastSubmissionId
-  await cancelSubmission(id)
-  store.lastSubmissionId = null
-  store.voiceCreateSuccess = false
-  stopUndoCountdown()
-  persist()
-}
-
-// Issue sheet
-function openIssueSheet(issue: IssueListItem) {
-  sheetIssue.value = issue
-  filterMode.value = false
-  sheetOpen.value = true
-}
-
-function openFilterSheet() {
-  sheetIssue.value = null
-  filterMode.value = true
-  sheetOpen.value = true
-}
-
-function closeSheet() {
-  sheetOpen.value = false
-  setTimeout(() => {
-    sheetIssue.value = null
-    filterMode.value = false
-  }, 260)
+function onOpenFilter() {
+  sheet.openFilter()
+  pushWidgetDepth(2)
 }
 
 async function onActionDone() {
   await loadIssues(true)
 }
 
-// Token changed
+function onLauncherClick() {
+  if (!readToken()) {
+    useAdminToken().promptToken()
+    if (!readToken()) return
+  }
+  launcher.open()
+  pushWidgetDepth(1)
+}
+
 function onTokenChanged() {
   loadIssues(true)
 }
 
-// Show swipe hint once
-const HINT_KEY = computed(() => store.config.storageKey + ':swipe-hint-shown')
-
-onMounted(() => {
-  try {
-    if (!localStorage.getItem(HINT_KEY.value)) {
-      localStorage.setItem(HINT_KEY.value, '1')
-      setTimeout(() => {
-        swipeHintVisible.value = true
-        setTimeout(() => { swipeHintVisible.value = false }, 2500)
-      }, 900)
+function closeWidget(fromPopstate = false) {
+  composeOpen.value = false
+  sheet.close()
+  launcher.close()
+  
+  if (!fromPopstate) {
+    const depth = window.history.state?.widgetDepth || 0
+    if (depth > 0) {
+      history.go(-depth)
     }
-  } catch { /* */ }
+  }
+}
+
+function pushWidgetDepth(targetDepth: number) {
+  const currentDepth = window.history.state?.widgetDepth || 0
+  if (currentDepth < targetDepth) {
+    history.pushState({ widgetDepth: targetDepth }, '')
+  }
+}
+
+function onLayerClose(layerDepth: number) {
+  if (layerDepth === 3) composeOpen.value = false
+  else if (layerDepth === 2) sheet.close()
+  else if (layerDepth === 1) closeWidget(false)
+
+  const depth = window.history.state?.widgetDepth || 0
+  if (depth >= layerDepth) {
+    history.go(-(depth - layerDepth + 1))
+  }
+}
+
+function initPopstateAction() {
+  window.addEventListener('popstate', handlePopstate)
+}
+
+function handlePopstate(e: PopStateEvent) {
+  const currentDepth = window.history.state?.widgetDepth || 0
+  
+  if (currentDepth < 3 && composeOpen.value) {
+    composeOpen.value = false
+  }
+  if (currentDepth < 2 && sheet.sheetOpen.value) {
+    sheet.close()
+  }
+  if (currentDepth < 1 && launcher.isOpen.value) {
+    launcher.close()
+  }
+}
+
+// Cleanup timers and listeners on unmount
+onUnmounted(() => {
+  text.stopUndoCountdown()
+  window.removeEventListener('popstate', handlePopstate)
 })
 
-onUnmounted(() => {
-  stopVoiceTimer()
-  stopUndoCountdown()
-})
+initPopstateAction()
+function openItem(id: string | number) {
+  if (!readToken()) {
+    useAdminToken().promptToken()
+    if (!readToken()) return
+  }
+  const num = typeof id === 'string' ? parseInt(id, 10) : id
+  if (!launcher.isOpen.value) {
+    launcher.open()
+    pushWidgetDepth(1)
+  }
+  setMobileTab('list')
+  const found = store.issues.find(i => i.number === num)
+  if (found) {
+    onOpenIssue(found)
+  } else {
+    useApi().loadIssues(true).then(() => {
+      const issue = store.issues.find(i => i.number === num)
+      if (issue) onOpenIssue(issue)
+    })
+  }
+}
+
+defineExpose({ openItem })
 </script>

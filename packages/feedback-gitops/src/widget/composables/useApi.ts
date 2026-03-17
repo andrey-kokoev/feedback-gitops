@@ -9,6 +9,13 @@ export function useApi() {
     return String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
   }
 
+  function dispatchEvent(name: string, detail: any) {
+    const el = document.querySelector('feedback-gitops-widget')
+    if (el) {
+      el.dispatchEvent(new CustomEvent(`feedback:${name}`, { detail, bubbles: true, composed: true }))
+    }
+  }
+
   async function readApiPayload(response: Response, fallback: string): Promise<unknown> {
     const ct = (response.headers.get('content-type') ?? '').toLowerCase()
     let data: unknown = null
@@ -97,7 +104,9 @@ export function useApi() {
         execute,
       }),
     })
-    return readApiPayload(response, 'Failed to create request') as Promise<{ submissionId?: string }>
+    const data = await readApiPayload(response, 'Failed to create request') as { submissionId?: string }
+    dispatchEvent('item-action', { id: data.submissionId, action: 'create' })
+    return data
   }
 
   async function submitVoice(audioBlob: Blob, mimeType: string, durationMs: number): Promise<{ submissionId?: string }> {
@@ -122,7 +131,7 @@ export function useApi() {
     return readApiPayload(response, 'Failed to submit voice request') as Promise<{ submissionId?: string }>
   }
 
-  async function executeAction(issueNumber: number, action: string, target: 'issue' | 'pull_request' = 'issue'): Promise<{ pullRequest?: { url: string } }> {
+  async function submitComment(issueNumber: number, body: string): Promise<void> {
     const { requireToken } = useAdminToken()
     const token = requireToken()
     if (!token) throw new Error('Admin token required')
@@ -130,9 +139,52 @@ export function useApi() {
     const response = await fetch(store.config.actionEndpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-admin-token': token },
-      body: JSON.stringify({ issueNumber, target, action }),
+      body: JSON.stringify({ issueNumber, target: 'issue', action: 'comment', body }),
     })
-    return readApiPayload(response, 'Failed to apply action') as Promise<{ pullRequest?: { url: string } }>
+    await readApiPayload(response, 'Failed to submit comment')
+    dispatchEvent('item-action', { id: issueNumber, action: 'comment' })
+  }
+
+  async function createLinkedItem(sourceIssueNumber: number, title: string, description: string, execute: boolean): Promise<{ submissionId?: string }> {
+    const { requireToken } = useAdminToken()
+    const token = requireToken()
+    if (!token) throw new Error('Admin token required')
+
+    const response = await fetch(store.config.endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify({
+        title,
+        description,
+        sourceIssueNumber,
+        url: window.location.href,
+        userAgent: navigator.userAgent,
+        labels: execute ? ['agent-execute'] : [],
+        execute
+      }),
+    })
+    const data = await readApiPayload(response, 'Failed to create linked item') as { submissionId?: string }
+    dispatchEvent('item-action', { id: data.submissionId, action: 'create_linked_item' })
+    return data
+  }
+
+  async function executeAction(issueNumber: number, action: string, target: 'issue' | 'pull_request' = 'issue', payload?: { title?: string, body?: string }): Promise<{ pullRequest?: { url: string } }> {
+    const { requireToken } = useAdminToken()
+    const token = requireToken()
+    if (!token) throw new Error('Admin token required')
+
+    const bodyObj: any = { issueNumber, target, action }
+    if (payload?.title !== undefined) bodyObj.title = payload.title
+    if (payload?.body !== undefined) bodyObj.body = payload.body
+
+    const response = await fetch(store.config.actionEndpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify(bodyObj),
+    })
+    const data = await readApiPayload(response, 'Failed to apply action') as { pullRequest?: { url: string } }
+    dispatchEvent('item-action', { id: issueNumber, action })
+    return data
   }
 
   async function cancelSubmission(submissionId: string): Promise<void> {
@@ -161,5 +213,5 @@ export function useApi() {
     return ''
   }
 
-  return { loadIssues, submitText, submitVoice, executeAction, cancelSubmission, mapActionError, getIssueUrlFromCreateResponse }
+  return { loadIssues, submitText, submitVoice, executeAction, cancelSubmission, mapActionError, getIssueUrlFromCreateResponse, submitComment, createLinkedItem }
 }

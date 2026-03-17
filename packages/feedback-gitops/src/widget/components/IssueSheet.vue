@@ -3,12 +3,76 @@
   <div id="cfw-mbs" :class="{ active: open, 'panel-left': store.handedness === 'left' }">
     <div id="cfw-mbs-handle"></div>
     <div v-if="issue" id="cfw-mbs-content">
-      <div class="cfw-is-num">#{{ issue.number }}</div>
-      <a class="cfw-is-title" :href="issue.url" target="_blank" rel="noopener noreferrer">{{ issue.title }}</a>
       <div class="cfw-is-status">{{ issue.status || issue.state }}{{ issue.statusDetail ? ' \u00b7 ' + issue.statusDetail : '' }}</div>
+      <div class="cfw-is-num">#{{ issue.number }} &middot; {{ formatTime(issue.updatedAt) }}</div>
 
-      <div v-if="issue.labels?.length" class="cfw-is-badges">
-        <span v-for="label in issue.labels" :key="label" class="cfw-badge">{{ label }}</span>
+      <template v-if="editMode">
+        <input v-model="editDraftTitle" class="cfw-edit-title" placeholder="Issue title..." style="width: 100%; background: transparent; border: 1px solid rgba(124,187,255,0.2); color: #fff; padding: 12px; border-radius: 8px; font-family: inherit; font-size: 16px; font-weight: bold; margin-top: 12px;" />
+        <textarea
+          v-model="editDraftBody"
+          placeholder="Issue description..."
+          style="width: 100%; min-height: 120px; background: transparent; border: 1px solid rgba(124,187,255,0.2); color: #d9e7f7; padding: 12px; border-radius: 8px; font-family: inherit; font-size: 14px; margin-top: 8px; resize: vertical;"
+        ></textarea>
+        <!-- Save/Cancel buttons -->
+        <div class="cfw-is-action-row" style="margin-top: 8px;">
+          <button class="cfw-btn cfw-btn-outline" @click="$emit('cancel-edit')" style="flex: 1">Cancel</button>
+          <button class="cfw-btn cfw-btn-primary" :disabled="executing || !editDraftTitle.trim()" @click="onSaveEdit" style="flex: 1">
+            {{ executing ? 'Saving...' : 'Save' }}
+          </button>
+        </div>
+      </template>
+      <template v-else>
+        <a class="cfw-is-title" :href="issue.url" target="_blank" rel="noopener noreferrer">{{ issue.title }}</a>
+        <div v-if="issue.body" class="cfw-is-body" style="font-size: 14px; color: #a9c2df; margin-top: 12px; white-space: pre-wrap; line-height: 1.5; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">{{ issue.body }}</div>
+
+        <div v-if="issue.labels?.length" class="cfw-is-badges">
+          <span v-for="label in issue.labels" :key="label" class="cfw-badge">{{ label }}</span>
+        </div>
+
+        <!-- Action-first CTA -->
+        <div class="cfw-is-primary-box">
+          <button v-if="isActedOn" class="cfw-btn cfw-btn-primary cfw-is-w100" @click="$emit('compose-sheet', 'comment', issue)">Comment</button>
+          <div v-else class="cfw-is-action-row">
+            <button class="cfw-btn cfw-btn-outline" @click="$emit('edit-issue', issue)">Edit</button>
+            <button class="cfw-btn cfw-btn-primary" @click="$emit('compose-sheet', 'comment', issue)">Comment</button>
+          </div>
+        </div>
+      </template>
+
+
+
+      <!-- Comments Section -->
+      <div v-if="hasComments" class="cfw-is-section cfw-comments-section">
+        <!-- Newest Comment -->
+        <div v-if="newestComment" class="cfw-comment cfw-comment-newest">
+          <div class="cfw-comment-meta">
+            <strong>{{ newestComment.author || 'User' }}</strong> &middot; {{ formatTime(newestComment.createdAt) }}
+          </div>
+          <div class="cfw-comment-body">{{ newestComment.body }}</div>
+        </div>
+
+        <!-- Collapsible older items -->
+        <template v-if="olderComments.length > 0">
+          <button v-if="!expandedComments" class="cfw-comments-expand" @click="expandedComments = true">
+            Show {{ olderComments.length }} previous comment{{ olderComments.length > 1 ? 's' : '' }}
+          </button>
+          <template v-else>
+            <div v-for="c in olderComments" :key="c.id" class="cfw-comment">
+              <div class="cfw-comment-meta">
+                <strong>{{ c.author || 'User' }}</strong> &middot; {{ formatTime(c.createdAt) }}
+              </div>
+              <div class="cfw-comment-body">{{ c.body }}</div>
+            </div>
+          </template>
+        </template>
+      </div>
+
+      <!-- Source section -->
+      <div v-if="issue.sourceIssue" class="cfw-is-section">
+        <div class="cfw-is-section-label">Source Item</div>
+        <a class="cfw-is-pr-link" :href="issue.sourceIssue.url" target="_blank" rel="noopener noreferrer">
+          #{{ issue.sourceIssue.number }} {{ issue.sourceIssue.title }}
+        </a>
       </div>
 
       <!-- Issue actions -->
@@ -63,7 +127,7 @@
             :key="val"
             class="cfw-fs-pill"
             :class="{ active: store.listView === val }"
-            @click="store.listView = val; persist(); $emit('filter-changed')"
+            @click="store.listView = val as any; persist(); $emit('filter-changed')"
           >{{ label }}</button>
         </div>
       </div>
@@ -75,7 +139,7 @@
             :key="val"
             class="cfw-fs-pill"
             :class="{ active: store.listSort === val }"
-            @click="store.listSort = val; persist(); $emit('filter-changed')"
+            @click="store.listSort = val as any; persist(); $emit('filter-changed')"
           >{{ label }}</button>
         </div>
       </div>
@@ -98,22 +162,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import { useApi } from '../composables/useApi'
+import { VIEW_OPTIONS, SORT_OPTIONS, STATUS_OPTIONS } from '../constants'
 import type { IssueListItem } from '../types'
 
 const props = defineProps<{
   open: boolean
   issue?: IssueListItem | null
   filterMode?: boolean
+  editMode?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   'action-done': []
   'filter-changed': []
+  'compose-sheet': [mode: 'comment' | 'linked_item', issue: IssueListItem]
+  'edit-issue': [issue: IssueListItem]
+  'cancel-edit': []
 }>()
 
 const store = useWidgetStore()
@@ -122,22 +191,40 @@ const { executeAction, mapActionError } = useApi()
 
 const executing = ref(false)
 const actionError = ref('')
+const expandedComments = ref(false)
+
+const editDraftTitle = ref('')
+const editDraftBody = ref('')
+
+watch(() => props.editMode, (val: boolean) => {
+  if (val && props.issue) {
+    editDraftTitle.value = props.issue.title
+    editDraftBody.value = props.issue.body || ''
+  }
+})
+
+const isActedOn = computed(() => {
+  if (!props.issue) return false
+  return (props.issue.comments && props.issue.comments.length > 0) || props.issue.status !== 'new'
+})
+
+const sortedComments = computed(() => {
+  if (!props.issue?.comments) return []
+  return [...props.issue.comments].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+})
+
+const hasComments = computed(() => sortedComments.value.length > 0)
+const newestComment = computed(() => sortedComments.value[0] || null)
+const olderComments = computed(() => sortedComments.value.slice(1))
+
+function formatTime(isoStr: string) {
+  const date = new Date(isoStr)
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
 
 
 const issueActions = computed(() => Array.isArray(props.issue?.issueActions) ? props.issue!.issueActions : [])
 const prActions = computed(() => Array.isArray(props.issue?.pullRequestActions) ? props.issue!.pullRequestActions : [])
-
-const VIEW_OPTIONS: [string, string][] = [
-  ['active', 'Active'], ['needs_action', 'Needs action'], ['completed', 'Completed'], ['all', 'All'],
-]
-const SORT_OPTIONS: [string, string][] = [
-  ['updated_desc', 'Newest'], ['updated_asc', 'Oldest'],
-]
-const STATUS_OPTIONS: [string, string][] = [
-  ['new', 'New'], ['queued', 'Queued'], ['pr_draft', 'PR draft'], ['pr_open', 'PR open'],
-  ['pr_closed_unmerged', 'PR closed'], ['pr_merge_requested', 'Merge requested'],
-  ['merged', 'Merged'], ['closed_unmerged', 'Closed'],
-]
 
 async function onAction(issueNumber: number, target: 'issue' | 'pull_request', actionId: string) {
   actionError.value = ''
@@ -146,6 +233,28 @@ async function onAction(issueNumber: number, target: 'issue' | 'pull_request', a
     await executeAction(issueNumber, actionId, target)
     emit('action-done')
     emit('close')
+  } catch (err) {
+    actionError.value = mapActionError(err instanceof Error ? err.message : '')
+  } finally {
+    executing.value = false
+  }
+}
+
+async function onSaveEdit() {
+  if (!props.issue) return
+  const title = editDraftTitle.value.trim()
+  if (!title) return
+
+  actionError.value = ''
+  executing.value = true
+  try {
+    await executeAction(props.issue.number, 'edit', 'issue', {
+      title,
+      body: editDraftBody.value.trim()
+    })
+    emit('action-done')
+    // We keep card open after edit to see changes (the action-done should reload the issue list)
+    emit('cancel-edit') 
   } catch (err) {
     actionError.value = mapActionError(err instanceof Error ? err.message : '')
   } finally {

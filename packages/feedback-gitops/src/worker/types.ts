@@ -39,6 +39,7 @@ export interface GitHubAction {
 export interface IssueListItem {
   number: number;
   title: string;
+  body?: string;
   state: "open" | "closed";
   url: string;
   updatedAt: string;
