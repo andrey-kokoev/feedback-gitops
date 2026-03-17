@@ -8,13 +8,18 @@ export function useAdminToken() {
   }
 
   function readToken(): string {
-    try { return localStorage.getItem(storageKey()) ?? '' } catch { return '' }
+    try {
+      const val = localStorage.getItem(storageKey()) ?? ''
+      store.adminToken = val
+      return val
+    } catch { return '' }
   }
 
   function writeToken(value: string) {
     try {
       if (!value) localStorage.removeItem(storageKey())
       else localStorage.setItem(storageKey(), value)
+      store.adminToken = value
     } catch { /* */ }
   }
 

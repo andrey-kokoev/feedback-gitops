@@ -6,6 +6,7 @@
 import { onMounted } from 'vue'
 import { useWidgetStore } from './stores/widget'
 import { useWidgetState } from './composables/useWidgetState'
+import { useAdminToken } from './composables/useAdminToken'
 import MobileWidget from './components/MobileWidget.vue'
 import type { WidgetConfig } from './types'
 
@@ -13,11 +14,13 @@ const props = defineProps<{ widgetConfig?: WidgetConfig }>()
 
 const store = useWidgetStore()
 const { restore } = useWidgetState()
+const { readToken } = useAdminToken()
 
 onMounted(() => {
   if (props.widgetConfig) {
     store.init(props.widgetConfig)
     restore()
+    readToken() // seeds store.adminToken from localStorage
   }
 })
 </script>

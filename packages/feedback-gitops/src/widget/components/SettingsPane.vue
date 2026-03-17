@@ -78,7 +78,7 @@ const { persist } = useWidgetState()
 const { readToken, writeToken, promptToken } = useAdminToken()
 
 const tokenStatus = computed(() => {
-  const tok = readToken()
+  const tok = store.adminToken
   return tok ? 'Token is set: ' + tok.slice(0, 3) + '\u2026' : 'No token set.'
 })
 

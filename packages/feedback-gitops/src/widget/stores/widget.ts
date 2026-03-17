@@ -21,6 +21,7 @@ export const useWidgetStore = defineStore('widget', () => {
   const captureMode = ref<CaptureMode>('text')
   const handedness = ref<'left' | 'right'>('right')
   const panelSnap = ref<'top' | 'bottom'>('bottom')
+  const adminToken = ref('')
   const draftSettingsOpen = ref(false)
 
   // Draft
@@ -85,7 +86,7 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   return {
-    config, panelOpen, activeTab, mobileTab, captureMode, handedness, panelSnap,
+    config, panelOpen, activeTab, mobileTab, captureMode, handedness, panelSnap, adminToken,
     draftSettingsOpen, draftTitle, draftDescription, draftMergePolicy,
     voiceDraftState, voiceDraftReady, voiceDraftDurationMs,
     issues, issuesLoaded, loadingIssues, listView, listSort, listQuery, listStatusFilter,
