@@ -1,6 +1,6 @@
 <template>
   <div id="cfw-mbs-overlay" :class="{ active: open }" @click="$emit('close')"></div>
-  <div id="cfw-mbs" :class="{ active: open }">
+  <div id="cfw-mbs" :class="{ active: open }" :style="bottomSheetStyle">
     <div id="cfw-mbs-handle"></div>
     <div v-if="issue" id="cfw-mbs-content">
       <div class="cfw-is-num">#{{ issue.number }}</div>
@@ -122,6 +122,11 @@ const { executeAction, mapActionError } = useApi()
 
 const executing = ref(false)
 const actionError = ref('')
+
+const bottomSheetStyle = computed(() => {
+  const isLeft = store.handedness === 'left'
+  return { left: isLeft ? '0' : 'auto', right: isLeft ? 'auto' : '0' }
+})
 
 const issueActions = computed(() => Array.isArray(props.issue?.issueActions) ? props.issue!.issueActions : [])
 const prActions = computed(() => Array.isArray(props.issue?.pullRequestActions) ? props.issue!.pullRequestActions : [])

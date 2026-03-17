@@ -26,7 +26,7 @@
   <div id="cfw-desktop-backdrop" v-show="mobileOpen" @click="store.mobileOpen = false" />
 
   <!-- Mobile full-screen overlay -->
-  <div id="cfw-mobile" v-show="mobileOpen" style="display: flex; flex-direction: column;">
+  <div id="cfw-mobile" v-show="mobileOpen" :style="panelStyle">
     <div id="cfw-mobile-body">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
@@ -240,10 +240,21 @@ let voiceTimerHandle: ReturnType<typeof setInterval> | null = null
 let swipeStartX = 0
 
 const launcherStyle = computed(() => {
-  if (store.handedness === 'left') {
-    return { left: '10px', right: '', bottom: '20px' }
+  const isLeft = store.handedness === 'left'
+  return { left: isLeft ? '10px' : '', right: isLeft ? '' : '10px', bottom: '20px' }
+})
+
+const panelStyle = computed(() => {
+  const isLeft = store.handedness === 'left'
+  return {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    // desktop side: panel hugs the chosen edge (overrides inset set in CSS)
+    left: isLeft ? '0' : 'auto',
+    right: isLeft ? 'auto' : '0',
+    borderLeft: isLeft ? 'none' : undefined,
+    borderRight: isLeft ? undefined : 'none',
   }
-  return { right: '10px', left: '', bottom: '20px' }
 })
 
 const swipeHintStyle = computed(() => {
