@@ -1,6 +1,7 @@
 <template>
   <div class="cfw-text-form-wrap">
     <input
+      ref="titleInputRef"
       :id="titleId"
       v-model="store.draftTitle"
       type="text"
@@ -93,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 
@@ -129,4 +130,7 @@ function clearDraft() {
   store.draftDescription = ''
   persist()
 }
+
+const titleInputRef = ref<HTMLInputElement | null>(null)
+defineExpose({ focusTitle: () => titleInputRef.value?.focus() })
 </script>

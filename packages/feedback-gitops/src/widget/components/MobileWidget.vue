@@ -33,6 +33,7 @@
         <template v-if="!store.textCreateSuccess">
           <div id="cfw-mv-text-form" class="cfw-mf">
             <TextForm
+              ref="textFormRef"
               :mobile="true"
               title-id="cfw-m-title"
               desc-id="cfw-m-description"
@@ -202,13 +203,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import { useAdminToken } from '../composables/useAdminToken'
 import { useApi } from '../composables/useApi'
 import { useAudioRecorder } from '../composables/useAudioRecorder'
 import TextForm from './TextForm.vue'
+import type { ComponentExposed } from 'vue'
 import VoiceComposer from './VoiceComposer.vue'
 import IssuesList from './IssuesList.vue'
 import IssueSheet from './IssueSheet.vue'
@@ -221,6 +223,7 @@ const { readToken, requireToken } = useAdminToken()
 const { loadIssues: apiLoadIssues, submitText, submitVoice, cancelSubmission, mapActionError, getIssueUrlFromCreateResponse } = useApi()
 
 const mobileOpen = ref(false)
+const textFormRef = ref<ComponentExposed<typeof TextForm> | null>(null)
 const swipeHintVisible = ref(false)
 
 // Bottom sheet state
@@ -269,6 +272,9 @@ function setMobileTab(tab: 'text' | 'voice' | 'list' | 'settings') {
   store.activeTab = tab
   if (tab === 'list') {
     loadIssues(false)
+  }
+  if (tab === 'text') {
+    nextTick(() => textFormRef.value?.focusTitle())
   }
   persist()
 }
