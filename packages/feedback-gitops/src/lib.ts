@@ -2,7 +2,7 @@
  * feedback-gitops public library API.
  *
  * Consumer: wire createIssueConsumer into your Worker's queue handler.
- * Widget:   call generateWidgetScript to serve the client-side widget JS.
+ * Widget:   widget.js is served as a static asset via the ASSETS binding.
  */
 
 export { createIssueConsumer } from "./consumer";
@@ -12,7 +12,5 @@ export type {
   FeedbackSubmission,
   ConsumerConfig,
 } from "./consumer";
-
-export { generateWidgetScript } from "./widget";
 
 export { default as worker } from "./worker/index";
