@@ -45,6 +45,7 @@ export function useWidgetState() {
       store.draftSettingsOpen = Boolean(saved.draftSettingsOpen)
 
       if (saved.handedness === 'left' || saved.handedness === 'right') store.handedness = saved.handedness
+      if (saved.panelSnap === 'top' || saved.panelSnap === 'bottom') store.panelSnap = saved.panelSnap
     } catch { /* */ }
   }
 
@@ -63,6 +64,7 @@ export function useWidgetState() {
         draftMergePolicy: store.draftMergePolicy,
         draftSettingsOpen: store.draftSettingsOpen,
         handedness: store.handedness,
+        panelSnap: store.panelSnap,
       }))
     } catch { /* */ }
   }

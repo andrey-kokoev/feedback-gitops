@@ -27,6 +27,11 @@
 
   <!-- Mobile full-screen overlay -->
   <div id="cfw-mobile" v-show="mobileOpen" :style="panelStyle">
+    <div
+      id="cfw-panel-handle"
+      @touchstart.passive="onPanelTouchStart"
+      @touchend="onPanelTouchEnd"
+    ><div id="cfw-panel-handle-bar"></div></div>
     <div id="cfw-mobile-body">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
@@ -241,6 +246,7 @@ let voiceTimerHandle: ReturnType<typeof setInterval> | null = null
 
 // Launcher swipe
 let swipeStartX = 0
+let panelSwipeStartY = 0
 
 const launcherStyle = computed(() => {
   const isLeft = store.handedness === 'left'
@@ -249,14 +255,18 @@ const launcherStyle = computed(() => {
 
 const panelStyle = computed(() => {
   const isLeft = store.handedness === 'left'
+  const isTop = store.panelSnap === 'top'
   return {
     display: 'flex',
     flexDirection: 'column' as const,
-    // desktop side: panel hugs the chosen edge (overrides inset set in CSS)
     left: isLeft ? '0' : 'auto',
     right: isLeft ? 'auto' : '0',
     borderLeft: isLeft ? 'none' : undefined,
     borderRight: isLeft ? undefined : 'none',
+    // mobile snap position (desktop overrides via media query)
+    top: isTop ? '0' : 'auto',
+    bottom: isTop ? 'auto' : '0',
+    transition: 'top 0.25s ease, bottom 0.25s ease',
   }
 })
 
@@ -294,6 +304,21 @@ function onLauncherTouchEnd(e: TouchEvent) {
     applyHandedness(dx < 0 ? 'left' : 'right')
     e.preventDefault()
     return
+  }
+}
+
+function onPanelTouchStart(e: TouchEvent) {
+  panelSwipeStartY = e.touches[0].clientY
+}
+
+function onPanelTouchEnd(e: TouchEvent) {
+  const dy = e.changedTouches[0].clientY - panelSwipeStartY
+  if (dy > 40 && store.panelSnap === 'top') {
+    store.panelSnap = 'bottom'
+    persist()
+  } else if (dy < -40 && store.panelSnap === 'bottom') {
+    store.panelSnap = 'top'
+    persist()
   }
 }
 
