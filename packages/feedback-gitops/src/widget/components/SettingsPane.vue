@@ -1,5 +1,6 @@
 <template>
   <div id="cfw-mv-settings" :class="['cfw-mv', { active: store.mobileTab === 'settings' }]">
+    <div class="cfw-tab-body">
     <div class="cfw-m-settings">
       <h3>Admin token</h3>
       <div id="cfw-m-token-status" class="cfw-m-settings-token">{{ tokenStatus }}</div>
@@ -57,6 +58,7 @@
       </div>
       <p class="cfw-m-settings-note">Or swipe the panel handle up or down.</p>
     </div>
+    </div><!-- /cfw-tab-body -->
   </div>
 </template>
 

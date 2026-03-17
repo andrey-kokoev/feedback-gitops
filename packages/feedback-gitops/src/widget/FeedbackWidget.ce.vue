@@ -37,9 +37,10 @@ onMounted(() => {
 #cfw-mobile-body { flex: 1; overflow: hidden; position: relative; }
 .cfw-mv { position: absolute; inset: 0; display: none; flex-direction: column; overflow: hidden; }
 .cfw-mv.active { display: flex; }
+/* Single wrapper — only element that changes for snap positioning */
+.cfw-tab-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 #cfw-mobile-body.snap-bottom .cfw-mv { justify-content: flex-end; }
-#cfw-mobile-body.snap-bottom .cfw-mf { flex: 0 0 auto; max-height: 100%; overflow: hidden; }
-#cfw-mobile-body.snap-bottom .cfw-m-voice { flex: 0 0 auto; max-height: 100%; overflow: hidden; }
+#cfw-mobile-body.snap-bottom .cfw-tab-body { flex: 0 0 auto; max-height: 100%; }
 #cfw-mobile-nav { height: 56px; display: flex; border-top: 1px solid rgba(124,187,255,0.18); background: rgba(10,17,29,0.98); flex-shrink: 0; }
 .cfw-nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: #7f9cbc; cursor: pointer; font-size: 10px; padding: 0; -webkit-tap-highlight-color: transparent; }
 .cfw-nav-btn.active { color: #9ad2ff; }
@@ -49,7 +50,7 @@ onMounted(() => {
 #cfw-ml-head-actions { display: flex; gap: 8px; }
 #cfw-ml-head-actions button { height: 30px; padding: 0 10px; border: 1px solid #2f4864; border-radius: 6px; background: #0d1727; color: #9bb7d3; font-size: 12px; cursor: pointer; }
 #cfw-ml-head-actions button:disabled { opacity: 0.5; }
-#cfw-ml-body { flex: 1; overflow-y: auto; overscroll-behavior-y: contain; }
+#cfw-ml-body { overflow-y: auto; overscroll-behavior-y: contain; }
 #cfw-ml-ptr { height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #9ad2ff; transition: height 0.15s ease; flex-shrink: 0; }
 #cfw-ml-ptr.cfw-ml-ptr-active { height: 36px; }
 .cfw-ml-empty { padding: 32px 14px; font-size: 13px; color: #7f9cbc; text-align: center; line-height: 1.6; }
@@ -66,11 +67,11 @@ onMounted(() => {
 #cfw-mbs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10002; background: #0d1727; border-top: 1px solid rgba(124,187,255,0.28); border-radius: 16px 16px 0 0; padding: 0 14px 36px; max-height: 82vh; overflow-y: auto; transform: translateY(100%); transition: transform .25s ease; }
 #cfw-mbs.active { transform: translateY(0); }
 #cfw-mbs-handle { width: 36px; height: 4px; background: #2f4864; border-radius: 2px; margin: 12px auto 16px; }
-.cfw-mf { flex: 1; display: flex; flex-direction: column; padding: 14px; overflow: hidden; }
+.cfw-mf { display: flex; flex-direction: column; padding: 14px; }
 .cfw-mf input, .cfw-mf textarea, .cfw-mf select { width: 100%; border: 1px solid #2f4864; border-radius: 8px; background: #0d1727; color: #e2f0ff; box-sizing: border-box; font-family: inherit; }
 .cfw-mf input { height: 44px; padding: 0 14px; margin-bottom: 10px; font-size: 15px; flex-shrink: 0; }
-.cfw-textarea-wrap { flex: 1; min-height: 0; overflow: hidden; margin-bottom: 10px; }
-.cfw-mf textarea { width: 100%; height: 130px; min-height: 130px; padding: 12px 14px; font-size: 15px; resize: none; overflow-y: hidden; margin-bottom: 0; }
+.cfw-textarea-wrap { margin-bottom: 10px; }
+.cfw-mf textarea { width: 100%; height: 130px; min-height: 130px; max-height: 40vh; padding: 12px 14px; font-size: 15px; resize: none; overflow-y: hidden; margin-bottom: 0; }
 .cfw-mf input::placeholder, .cfw-mf textarea::placeholder { color: #7f9cbc; }
 .cfw-mf input:focus, .cfw-mf textarea:focus { outline: none; border-color: #4f7298; }
 .cfw-mf-policy { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; flex-shrink: 0; }
@@ -85,7 +86,7 @@ onMounted(() => {
 .cfw-m-success-hint { font-size: 13px; color: #7f9cbc; }
 .cfw-m-undo-btn { margin-top: 14px; padding: 7px 18px; border-radius: 8px; border: 1px solid rgba(124,187,255,0.35); background: transparent; color: #d9e7f7; font-size: 12px; cursor: pointer; }
 .cfw-m-undo-btn:hover { background: rgba(124,187,255,0.08); }
-.cfw-m-voice { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px; gap: 14px; overflow: hidden; }
+.cfw-m-voice { display: flex; flex-direction: column; justify-content: flex-end; padding: 14px; gap: 14px; }
 .cfw-m-vstatus { border: 1px solid #2f4864; border-radius: 12px; padding: 16px; background: rgba(11,24,40,0.65); flex-shrink: 0; }
 .cfw-m-vstatus-line { font-size: 15px; color: #d9e7f7; margin-bottom: 8px; }
 .cfw-m-vmeta { display: flex; justify-content: space-between; font-size: 13px; color: #9bb7d3; }

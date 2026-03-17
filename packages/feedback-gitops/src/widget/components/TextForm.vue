@@ -9,7 +9,7 @@
       maxlength="500"
       @input="onPersist"
     />
-    <div ref="textareaWrapRef" class="cfw-textarea-wrap">
+    <div class="cfw-textarea-wrap">
       <textarea
         ref="descRef"
         :id="descId"
@@ -136,22 +136,14 @@ function clearDraft() {
 
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const descRef = ref<HTMLTextAreaElement | null>(null)
-const textareaWrapRef = ref<HTMLDivElement | null>(null)
 
 function resizeDesc() {
   const el = descRef.value
-  const wrap = textareaWrapRef.value
-  if (!el || !wrap) return
+  if (!el) return
   el.style.height = 'auto'
-  const scrollH = el.scrollHeight
-  const maxH = wrap.clientHeight
-  if (scrollH >= maxH) {
-    el.style.height = maxH + 'px'
-    el.style.overflowY = 'auto'
-  } else {
-    el.style.height = scrollH + 'px'
-    el.style.overflowY = 'hidden'
-  }
+  el.style.height = el.scrollHeight + 'px'
+  // CSS max-height caps growth; show scroll only when capped
+  el.style.overflowY = el.offsetHeight < el.scrollHeight ? 'auto' : 'hidden'
 }
 
 function onDescInput() {

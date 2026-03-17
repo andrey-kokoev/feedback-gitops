@@ -40,6 +40,7 @@
     <div id="cfw-mobile-body" :class="{ 'snap-bottom': store.panelSnap === 'bottom' }">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
+        <div class="cfw-tab-body">
         <template v-if="!store.textCreateSuccess">
           <div id="cfw-mv-text-form" class="cfw-mf">
             <TextForm
@@ -70,10 +71,12 @@
             @click.stop="onUndoText"
           >Undo ({{ undoSecondsLeft }})</button>
         </div>
+        </div><!-- /cfw-tab-body -->
       </div>
 
       <!-- Voice tab -->
       <div id="cfw-mv-voice" :class="['cfw-mv', { active: store.mobileTab === 'voice' }]">
+        <div class="cfw-tab-body">
         <template v-if="!store.voiceCreateSuccess">
           <div id="cfw-mv-voice-form" class="cfw-m-voice">
             <VoiceComposer
@@ -103,6 +106,7 @@
             @click.stop="onUndoVoice"
           >Undo ({{ undoSecondsLeft }})</button>
         </div>
+        </div><!-- /cfw-tab-body -->
       </div>
 
       <!-- Issues list tab -->

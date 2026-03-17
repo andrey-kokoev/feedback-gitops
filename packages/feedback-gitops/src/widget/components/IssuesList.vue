@@ -1,5 +1,6 @@
 <template>
   <div id="cfw-mv-list" :class="['cfw-mv', { active: store.mobileTab === 'list' }]">
+    <div class="cfw-tab-body">
     <div id="cfw-ml-head">
       <span id="cfw-ml-head-title">Requests</span>
       <div id="cfw-ml-head-actions">
@@ -39,6 +40,7 @@
         </div>
       </template>
     </div>
+    </div><!-- /cfw-tab-body -->
   </div>
 </template>
 
