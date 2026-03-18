@@ -6,12 +6,9 @@ export function useIssueSheet() {
   const sheetIssue = ref<IssueListItem | null>(null)
   const filterMode = ref(false)
 
-  const editMode = ref(false)
-
-  function openIssue(issue: IssueListItem, edit: boolean = false) {
+  function openIssue(issue: IssueListItem) {
     sheetIssue.value = issue
     filterMode.value = false
-    editMode.value = edit
     sheetOpen.value = true
   }
 
@@ -26,7 +23,6 @@ export function useIssueSheet() {
     setTimeout(() => {
       sheetIssue.value = null
       filterMode.value = false
-      editMode.value = false
     }, 260)
   }
 
@@ -34,7 +30,6 @@ export function useIssueSheet() {
     sheetOpen,
     sheetIssue,
     filterMode,
-    editMode,
     openIssue,
     openFilter,
     close,

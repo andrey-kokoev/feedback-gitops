@@ -35,6 +35,7 @@
             @open-issue="$emit('open-issue', $event)"
             @swipe-action="a => $emit('swipe-action', a, issue)"
             @edit-issue="$emit('edit-issue', issue)"
+            @menu-toggle="onMenuToggle"
           />
         </template>
         <template v-if="unpinnedIssues.length">
@@ -46,11 +47,18 @@
             @open-issue="$emit('open-issue', $event)"
             @swipe-action="a => $emit('swipe-action', a, issue)"
             @edit-issue="$emit('edit-issue', issue)"
+            @menu-toggle="onMenuToggle"
           />
         </template>
       </template>
     </div>
     </div><!-- /cfw-tab-body -->
+    <!-- Desktop menu - rendered outside scrollable area -->
+    <div v-if="menuOpen" class="cfw-desktop-menu" :style="menuStyle">
+      <button v-for="action in menuActions" :key="action.id" @click.stop="onMenuAction(action.id)">
+        {{ action.label }}
+      </button>
+    </div>
     <!-- Bottom dragger for middle position -->
     <div v-if="store.panelSnap === 'middle'" class="cfw-panel-handle cfw-panel-handle-bottom" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
   </div>
@@ -69,8 +77,80 @@ const emit = defineEmits<{
   'open-issue': [issue: IssueListItem]
   'open-filter': []
   'swipe-action': [action: SwipeActionType, issue: IssueListItem]
-  'edit-issue': [issue: IssueListItem]
 }>()
+
+// Desktop menu state
+const menuOpen = ref(false)
+const menuIssue = ref<IssueListItem | null>(null)
+const menuPos = ref({ top: 0, left: 0 })
+
+const menuStyle = computed(() => ({
+  top: `${menuPos.value.top}px`,
+  left: `${menuPos.value.left}px`,
+}))
+
+const menuActions = computed(() => {
+  if (!menuIssue.value) return []
+  return [
+    { id: 'done_archive', label: 'Done / Archive' },
+    { id: 'pin_unpin', label: menuIssue.value.pinned ? 'Unpin' : 'Pin' },
+    { id: 'comment', label: 'Comment' },
+    { id: 'create_linked_item', label: 'Create linked item' },
+    { id: 'mark_viewed', label: 'Mark viewed' },
+  ]
+})
+
+const MENU_ITEM_HEIGHT = 32 // approximate height per menu item
+const MENU_PADDING = 16 // vertical padding
+const MENU_GAP = 4
+
+function onMenuToggle(issue: IssueListItem, btnRef: HTMLElement) {
+  if (menuOpen.value && menuIssue.value?.number === issue.number) {
+    menuOpen.value = false
+    return
+  }
+  menuIssue.value = issue
+  menuOpen.value = true
+  const rect = btnRef.getBoundingClientRect()
+  
+  // Calculate menu height based on number of actions
+  const actionCount = menuActions.value.length || 6
+  const menuHeight = actionCount * MENU_ITEM_HEIGHT + MENU_PADDING
+  
+  // Calculate available space below and above
+  const spaceBelow = window.innerHeight - rect.bottom
+  const spaceAbove = rect.top
+  
+  let top: number
+  // If not enough space below, show above button (but not above viewport)
+  if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+    top = Math.max(8, rect.top - menuHeight - MENU_GAP)
+  } else {
+    top = rect.bottom + MENU_GAP
+  }
+  
+  menuPos.value = {
+    top,
+    left: Math.max(10, rect.right - 150),
+  }
+  // Close on click outside
+  setTimeout(() => {
+    const closeHandler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.cfw-desktop-menu')) {
+        menuOpen.value = false
+        document.removeEventListener('click', closeHandler)
+      }
+    }
+    document.addEventListener('click', closeHandler, { once: true })
+  }, 0)
+}
+
+function onMenuAction(id: string) {
+  menuOpen.value = false
+  if (!menuIssue.value) return
+  emit('swipe-action', id as SwipeActionType, menuIssue.value)
+}
 
 const store = useWidgetStore()
 const { hasAccess } = useApi()
@@ -83,8 +163,24 @@ let ptrStartY = 0
 let ptrTracking = false
 
 const isUnresolved = (i: IssueListItem) => !['completed', 'closed_unmerged', 'merged'].includes(i.status || '') && i.state !== 'closed'
-const pinnedIssues = computed(() => store.issues.filter(i => !!i.pinned && isUnresolved(i)))
-const unpinnedIssues = computed(() => store.issues.filter(i => !i.pinned || !isUnresolved(i)))
+
+// Check if issue has been updated since last view
+const isUnread = (i: IssueListItem) => {
+  const lastView = store.itemViews[i.number] || 0
+  const updatedAt = new Date(i.updatedAt).getTime()
+  return updatedAt > lastView
+}
+
+// Filter based on view mode (client-side for unread)
+const filteredIssues = computed(() => {
+  if (store.listView === 'unread') {
+    return store.issues.filter(i => isUnread(i))
+  }
+  return store.issues
+})
+
+const pinnedIssues = computed(() => filteredIssues.value.filter(i => !!i.pinned && isUnresolved(i)))
+const unpinnedIssues = computed(() => filteredIssues.value.filter(i => !i.pinned || !isUnresolved(i)))
 
 const emptyText = computed(() => {
   if (!hasAccess()) return 'Authentication required to view requests.'

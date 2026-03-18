@@ -1,5 +1,5 @@
-import { c as d, d as s, F as r } from "./FeedbackWidget.ce-CoXpwQTr.js";
-import { c as a } from "./index-ex6NYGd4.js";
+import { c as d, d as s, F as r } from "./FeedbackWidget.ce-Dc9B2VOe.js";
+import { c as a } from "./index-Bi0b3um2.js";
 function c() {
   const e = window.__WIDGET_CONFIG__;
   if (!e) throw new Error("Missing widget dev config: window.__WIDGET_CONFIG__ is undefined");

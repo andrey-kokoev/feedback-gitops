@@ -6,38 +6,17 @@
       <div class="cfw-is-status">{{ issue.status || issue.state }}{{ issue.statusDetail ? ' \u00b7 ' + issue.statusDetail : '' }}</div>
       <div class="cfw-is-num">#{{ issue.number }} &middot; {{ formatTime(issue.updatedAt) }}</div>
 
-      <template v-if="editMode">
-        <input v-model="editDraftTitle" class="cfw-edit-title" placeholder="Issue title..." style="width: 100%; background: transparent; border: 1px solid rgba(124,187,255,0.2); color: #fff; padding: 12px; border-radius: 8px; font-family: inherit; font-size: 16px; font-weight: bold; margin-top: 12px;" />
-        <textarea
-          v-model="editDraftBody"
-          placeholder="Issue description..."
-          style="width: 100%; min-height: 120px; background: transparent; border: 1px solid rgba(124,187,255,0.2); color: #d9e7f7; padding: 12px; border-radius: 8px; font-family: inherit; font-size: 14px; margin-top: 8px; resize: vertical;"
-        ></textarea>
-        <!-- Save/Cancel buttons -->
-        <div class="cfw-is-action-row" style="margin-top: 8px;">
-          <button class="cfw-btn cfw-btn-outline" @click="$emit('cancel-edit')" style="flex: 1">Cancel</button>
-          <button class="cfw-btn cfw-btn-primary" :disabled="executing || !editDraftTitle.trim()" @click="onSaveEdit" style="flex: 1">
-            {{ executing ? 'Saving...' : 'Save' }}
-          </button>
-        </div>
-      </template>
-      <template v-else>
-        <a class="cfw-is-title" :href="issue.url" target="_blank" rel="noopener noreferrer">{{ issue.title }}</a>
-        <div v-if="issue.body" class="cfw-is-body" style="font-size: 14px; color: #a9c2df; margin-top: 12px; white-space: pre-wrap; line-height: 1.5; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">{{ issue.body }}</div>
+      <a class="cfw-is-title" :href="issue.url" target="_blank" rel="noopener noreferrer">{{ issue.title }}</a>
+      <div v-if="issue.body" class="cfw-is-body" style="font-size: 14px; color: #a9c2df; margin-top: 12px; white-space: pre-wrap; line-height: 1.5; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">{{ issue.body }}</div>
 
-        <div v-if="issue.labels?.length" class="cfw-is-badges">
-          <span v-for="label in issue.labels" :key="label" class="cfw-badge">{{ label }}</span>
-        </div>
+      <div v-if="issue.labels?.length" class="cfw-is-badges">
+        <span v-for="label in issue.labels" :key="label" class="cfw-badge">{{ label }}</span>
+      </div>
 
-        <!-- Action-first CTA -->
-        <div class="cfw-is-primary-box">
-          <button v-if="isActedOn" class="cfw-btn cfw-btn-primary cfw-is-w100" @click="$emit('compose-sheet', 'comment', issue)">Comment</button>
-          <div v-else class="cfw-is-action-row">
-            <button class="cfw-btn cfw-btn-outline" @click="$emit('edit-issue', issue)">Edit</button>
-            <button class="cfw-btn cfw-btn-primary" @click="$emit('compose-sheet', 'comment', issue)">Comment</button>
-          </div>
-        </div>
-      </template>
+      <!-- Action-first CTA -->
+      <div class="cfw-is-primary-box">
+        <button class="cfw-is-pill cfw-is-pill-primary" @click="$emit('compose-sheet', 'comment', issue)">Comment</button>
+      </div>
 
 
 
@@ -114,7 +93,7 @@
 
       <div v-if="actionError" class="cfw-is-error active">{{ actionError }}</div>
 
-      <button class="cfw-mbs-close" @click="$emit('close')">Close</button>
+      <button class="cfw-mbs-close" @click.stop="$emit('close')">Close</button>
     </div>
 
     <!-- Filter sheet content (shown when no issue, via filterMode) -->
@@ -155,8 +134,8 @@
           >{{ label }}</button>
         </div>
       </div>
-      <button class="cfw-mbs-close" style="margin-bottom: 8px" @click="clearFilters">Clear filters</button>
-      <button class="cfw-mbs-close" @click="$emit('close')">Done</button>
+      <button class="cfw-mbs-close" style="margin-bottom: 8px" @click.stop="clearFilters">Clear filters</button>
+      <button class="cfw-mbs-close" @click.stop="$emit('close')">Done</button>
     </div>
   </div>
 </template>
@@ -173,7 +152,6 @@ const props = defineProps<{
   open: boolean
   issue?: IssueListItem | null
   filterMode?: boolean
-  editMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -181,8 +159,6 @@ const emit = defineEmits<{
   'action-done': []
   'filter-changed': []
   'compose-sheet': [mode: 'comment' | 'linked_item', issue: IssueListItem]
-  'edit-issue': [issue: IssueListItem]
-  'cancel-edit': []
 }>()
 
 const store = useWidgetStore()
@@ -192,16 +168,6 @@ const { executeAction, mapActionError } = useApi()
 const executing = ref(false)
 const actionError = ref('')
 const expandedComments = ref(false)
-
-const editDraftTitle = ref('')
-const editDraftBody = ref('')
-
-watch(() => props.editMode, (val: boolean) => {
-  if (val && props.issue) {
-    editDraftTitle.value = props.issue.title
-    editDraftBody.value = props.issue.body || ''
-  }
-})
 
 const isActedOn = computed(() => {
   if (!props.issue) return false
@@ -233,28 +199,6 @@ async function onAction(issueNumber: number, target: 'issue' | 'pull_request', a
     await executeAction(issueNumber, actionId, target)
     emit('action-done')
     emit('close')
-  } catch (err) {
-    actionError.value = mapActionError(err instanceof Error ? err.message : '')
-  } finally {
-    executing.value = false
-  }
-}
-
-async function onSaveEdit() {
-  if (!props.issue) return
-  const title = editDraftTitle.value.trim()
-  if (!title) return
-
-  actionError.value = ''
-  executing.value = true
-  try {
-    await executeAction(props.issue.number, 'edit', 'issue', {
-      title,
-      body: editDraftBody.value.trim()
-    })
-    emit('action-done')
-    // We keep card open after edit to see changes (the action-done should reload the issue list)
-    emit('cancel-edit') 
   } catch (err) {
     actionError.value = mapActionError(err instanceof Error ? err.message : '')
   } finally {

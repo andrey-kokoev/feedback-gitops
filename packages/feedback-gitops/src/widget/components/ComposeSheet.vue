@@ -4,7 +4,7 @@
     <div id="cfw-compose-handle"></div>
     <div class="cfw-compose-header">
       <span class="cfw-compose-title">{{ mode === 'comment' ? 'New Comment' : 'Create Linked Item' }}</span>
-      <button class="cfw-compose-close" @click="$emit('close')">&times;</button>
+      <button class="cfw-compose-close" @click.stop="$emit('close')">&times;</button>
     </div>
     
     <div v-if="issue" class="cfw-compose-context">
@@ -25,9 +25,9 @@
           @keydown.meta.enter="onSubmit"
         ></textarea>
       </div>
-      <div class="cfw-compose-actions" style="padding: 14px; border-top: 1px solid rgba(124,187,255,0.15); display: flex; justify-content: flex-end; gap: 8px;">
-        <button class="cfw-btn cfw-btn-outline" @click="$emit('close')">Cancel</button>
-        <button class="cfw-btn cfw-btn-primary" :disabled="!hasDraft" @click="onSubmit">
+      <div class="cfw-compose-actions">
+        <button class="cfw-is-pill" @click.stop="$emit('close')">Cancel</button>
+        <button class="cfw-is-pill cfw-is-pill-primary" :disabled="!hasDraft" @click="onSubmit">
           {{ store.creating ? 'Submitting...' : 'Submit' }}
         </button>
       </div>

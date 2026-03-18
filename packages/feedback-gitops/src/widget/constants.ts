@@ -6,6 +6,7 @@
 export const VIEW_OPTIONS: [string, string][] = [
   ['active', 'Active'],
   ['needs_action', 'Needs action'],
+  ['unread', 'Unread'],
   ['completed', 'Completed'],
   ['all', 'All'],
 ]

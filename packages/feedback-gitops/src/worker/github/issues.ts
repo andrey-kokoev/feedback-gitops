@@ -133,6 +133,7 @@ export async function listIssues(env: Env, limit: number, options: IssueListOpti
       ...issue,
       status,
       statusDetail,
+      pinned: issue.labels.includes("pinned"),
       pullRequest,
       mergePolicy: deriveMergePolicy(issue.labels),
       issueActions: deriveIssueActions(issue.state, issue.labels),
@@ -241,6 +242,46 @@ export async function executeAction(env: Env, issueNumber: number, target: "issu
     }
     if (action === "reopen") {
       await setIssueState(env, issueNumber, "open");
+      return { pullRequest: null };
+    }
+    if (action === "done_archive") {
+      // Close the issue and add archive label
+      await setIssueState(env, issueNumber, "closed");
+      const issueResponse = await githubRequest(env, `/issues/${issueNumber}`);
+      if (issueResponse.ok) {
+        const issue = await issueResponse.json() as { labels: Array<{ name?: string }> };
+        const labels = issue.labels.map((l) => l.name).filter((n): n is string => Boolean(n));
+        if (!labels.includes("agent-archived")) {
+          labels.push("agent-archived");
+          await githubRequest(env, `/issues/${issueNumber}`, {
+            method: "PATCH",
+            body: JSON.stringify({ labels }),
+          });
+        }
+      }
+      return { pullRequest: null };
+    }
+    if (action === "pin_unpin") {
+      // Toggle the pinned label
+      const issueResponse = await githubRequest(env, `/issues/${issueNumber}`);
+      if (!issueResponse.ok) {
+        const text = await issueResponse.text();
+        throw new Error(`GitHub issue read failed (${issueResponse.status}): ${text}`);
+      }
+      const issue = await issueResponse.json() as { labels: Array<{ name?: string }> };
+      const labels = issue.labels.map((l) => l.name).filter((n): n is string => Boolean(n));
+      const hasPinned = labels.includes("pinned");
+      const nextLabels = hasPinned
+        ? labels.filter((l) => l !== "pinned")
+        : [...labels, "pinned"];
+      const patchResponse = await githubRequest(env, `/issues/${issueNumber}`, {
+        method: "PATCH",
+        body: JSON.stringify({ labels: nextLabels }),
+      });
+      if (!patchResponse.ok) {
+        const text = await patchResponse.text();
+        throw new Error(`GitHub issue update failed (${patchResponse.status}): ${text}`);
+      }
       return { pullRequest: null };
     }
     throw new Error(`Unsupported issue action: ${action}`);

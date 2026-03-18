@@ -183,29 +183,26 @@
         <span>Close</span>
       </button>
     </nav>
+
+    <!-- Issue detail / filter bottom sheet -->
+    <IssueSheet
+      :open="sheet.sheetOpen.value"
+      :issue="sheet.sheetIssue.value"
+      :filter-mode="sheet.filterMode.value"
+      @action-done="onActionDone"
+      @close="onLayerClose(2)"
+      @filter-changed="loadIssues(true)"
+      @compose-sheet="openComposeSheet"
+    />
+
+    <ComposeSheet
+      :open="composeOpen"
+      :mode="composeMode"
+      :issue="composeIssue"
+      @close="onLayerClose(3)"
+      @action-done="onActionDone"
+    />
   </div>
-
-  <!-- Issue detail / filter bottom sheet -->
-  <IssueSheet
-    :open="sheet.sheetOpen.value"
-    :issue="sheet.sheetIssue.value"
-    :filter-mode="sheet.filterMode.value"
-    :edit-mode="sheet.editMode.value"
-    @action-done="onActionDone"
-    @close="onLayerClose(2)"
-    @cancel-edit="sheet.editMode.value = false"
-    @filter-changed="loadIssues(true)"
-    @compose-sheet="openComposeSheet"
-    @edit-issue="onEditIssue"
-  />
-
-  <ComposeSheet
-    :open="composeOpen"
-    :mode="composeMode"
-    :issue="composeIssue"
-    @close="onLayerClose(3)"
-    @action-done="onActionDone"
-  />
 </template>
 
 <script setup lang="ts">
@@ -311,11 +308,6 @@ async function onSwipeAction(action: SwipeActionType, issue: IssueListItem) {
   } catch (err) {
     console.warn('Action failed', err)
   }
-}
-
-function onEditIssue(issue: IssueListItem) {
-  sheet.openIssue(issue, true)
-  pushWidgetDepth(2)
 }
 
 function onOpenIssue(issue: IssueListItem) {
