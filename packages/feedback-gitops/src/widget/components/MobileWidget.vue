@@ -229,7 +229,7 @@ import type { SwipeActionType, IssueListItem } from '../types'
 const store = useWidgetStore()
 const { persist } = useWidgetState()
 const { onPanelTouchStart, onPanelTouchEnd } = usePanelSwipe()
-const { loadIssues, authorize } = useApi()
+const { loadIssues, authorize, executeAction } = useApi()
 
 // Feature composables
 const text = useTextSubmission()
@@ -306,7 +306,7 @@ async function onSwipeAction(action: SwipeActionType, issue: IssueListItem) {
   }
   
   try {
-    await useApi().executeAction(issue.number, action, 'issue')
+    await executeAction(issue.number, action, 'issue')
     await loadIssues(true)
   } catch (err) {
     console.warn('Action failed', err)
@@ -412,7 +412,7 @@ function openItem(id: string | number) {
   if (found) {
     onOpenIssue(found)
   } else {
-    useApi().loadIssues(true).then(() => {
+    loadIssues(true).then(() => {
       const issue = store.issues.find(i => i.number === num)
       if (issue) onOpenIssue(issue)
     })

@@ -1,6 +1,7 @@
 <template>
   <div
     class="cfw-ml-row-wrap"
+    :class="{ 'menu-open': menuOpen }"
     @touchstart.passive="onTouchStart"
     @touchmove.passive="onTouchMove"
     @touchend="onTouchEnd"
@@ -16,7 +17,7 @@
     
     <div
       class="cfw-ml-row"
-      :class="{ unread: isUnread }"
+      :class="{ unread: isUnread, 'menu-open': menuOpen }"
       :style="rowStyle"
       @click="onClick"
       tabindex="0"
