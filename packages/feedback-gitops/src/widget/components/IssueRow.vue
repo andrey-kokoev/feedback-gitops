@@ -35,20 +35,22 @@
       </div>
       
       <!-- Desktop dots menu button (only visible on non-touch devices ideally) -->
-      <button class="cfw-ml-row-menu" @click.stop="menuOpen = !menuOpen">&#8942;</button>
+      <button ref="menuBtnRef" class="cfw-ml-row-menu" @click.stop="toggleMenu">&#8942;</button>
 
       <!-- Desktop dots menu dropdown -->
-      <div v-if="menuOpen" class="cfw-desktop-menu">
-        <button v-for="action in menuActions" :key="action.id" @click.stop="onMenuAction(action.id)">
-          {{ action.label }}
-        </button>
-      </div>
+      <Teleport to="body">
+        <div v-if="menuOpen" class="cfw-desktop-menu" :style="menuStyle" v-click-outside="() => menuOpen = false">
+          <button v-for="action in menuActions" :key="action.id" @click.stop="onMenuAction(action.id)">
+            {{ action.label }}
+          </button>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { useWidgetStore } from '../stores/widget'
 import { useWidgetState } from '../composables/useWidgetState'
 import type { IssueListItem, SwipeActionType } from '../types'
@@ -146,6 +148,44 @@ function onClick() {
 
 // Desktop menu
 const menuOpen = ref(false)
+const menuBtnRef = ref<HTMLElement | null>(null)
+const menuPos = ref({ top: 0, left: 0 })
+
+const menuStyle = computed(() => ({
+  top: `${menuPos.value.top}px`,
+  left: `${menuPos.value.left}px`,
+}))
+
+async function toggleMenu() {
+  menuOpen.value = !menuOpen.value
+  if (menuOpen.value) {
+    await nextTick()
+    const btn = menuBtnRef.value
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      // Position menu below the button, aligned to right edge of button
+      menuPos.value = {
+        top: rect.bottom + 4,
+        left: rect.right - 140, // menu width ~140px
+      }
+    }
+  }
+}
+
+// Close menu when clicking outside
+function onDocClick(e: MouseEvent) {
+  if (menuOpen.value) {
+    menuOpen.value = false
+  }
+}
+
+// Add/remove document click listener
+watch(menuOpen, (val) => {
+  if (val) {
+    setTimeout(() => document.addEventListener('click', onDocClick, { once: true }), 0)
+  }
+})
+
 const menuActions = computed(() => {
   const actions = [
     { id: 'done_archive', label: 'Done / Archive' },

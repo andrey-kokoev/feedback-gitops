@@ -1,5 +1,5 @@
-import { c as p, d as r, F as l } from "./FeedbackWidget.ce-D_hWJo2i.js";
-import { c as u } from "./index-CyjCQgu1.js";
+import { c as p, d as r, F as l } from "./FeedbackWidget.ce-CoXpwQTr.js";
+import { c as u } from "./index-ex6NYGd4.js";
 function g() {
   const e = window.__FEEDBACK_GITOPS_WIDGET_CONFIG__;
   if (e) {
