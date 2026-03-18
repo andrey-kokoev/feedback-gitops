@@ -32,19 +32,19 @@
     <div :class="mobile ? 'cfw-m-vcontrols' : 'cfw-voice-controls'">
       <button
         type="button"
-        :class="['cfw-btn', store.voiceDraftState === 'recording' ? 'cfw-btn-primary' : 'cfw-btn-outline']"
+        class="cfw-btn cfw-btn-record"
         :disabled="store.creating"
         @click="$emit('toggle-recording')"
       >{{ store.voiceDraftState === 'recording' ? 'Pause' : 'Record' }}</button>
       <button
         type="button"
-        class="cfw-btn cfw-btn-danger"
+        class="cfw-btn cfw-btn-reset"
         :disabled="store.creating || (!store.voiceDraftReady && store.voiceDraftState === 'idle')"
         @click="$emit('reset')"
       >Reset</button>
       <button
         type="button"
-        class="cfw-btn cfw-btn-primary"
+        class="cfw-btn cfw-btn-send"
         :disabled="store.creating || store.voiceDraftState === 'recording' || !store.voiceDraftReady"
         @click="$emit('send')"
       >Send</button>

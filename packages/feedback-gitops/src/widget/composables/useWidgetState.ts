@@ -49,6 +49,9 @@ export function useWidgetState() {
 
       if (saved.handedness === 'left' || saved.handedness === 'right') store.handedness = saved.handedness
       if (saved.panelSnap === 'top' || saved.panelSnap === 'middle' || saved.panelSnap === 'bottom') store.panelSnap = saved.panelSnap
+      if (['small', 'medium', 'large'].includes(saved.fontSize)) store.fontSize = saved.fontSize
+      if (['compact', 'default', 'comfortable'].includes(saved.density)) store.density = saved.density
+      if (['ocean', 'forest', 'berry', 'sunset'].includes(saved.theme)) store.theme = saved.theme
 
       // Redesign elements
       if (['technical_issue', 'personal_todo', 'feature_request'].includes(saved.mode)) store.mode = saved.mode
@@ -75,6 +78,9 @@ export function useWidgetState() {
         draftMergePolicy: store.draftMergePolicy,
         handedness: store.handedness,
         panelSnap: store.panelSnap,
+        fontSize: store.fontSize,
+        density: store.density,
+        theme: store.theme,
         mode: store.mode,
         swipeMapping: store.swipeMapping,
         itemViews: store.itemViews,

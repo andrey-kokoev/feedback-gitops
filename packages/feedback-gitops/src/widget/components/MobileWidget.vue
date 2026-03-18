@@ -31,13 +31,51 @@
     v-show="launcher.isOpen.value"
     :class="{ 'panel-left': store.handedness === 'left' }"
     :style="panelStyle"
+    :data-font-size="store.fontSize"
+    :data-density="store.density"
+    :data-theme="store.theme"
   >
     <div id="cfw-mobile-body" :class="{ 'snap-bottom': store.panelSnap === 'bottom', 'snap-top': store.panelSnap === 'top', 'snap-middle': store.panelSnap === 'middle' }">
       <!-- Text tab -->
       <div id="cfw-mv-text" :class="['cfw-mv', { active: store.mobileTab === 'text' }]">
-        <div class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
+        <div v-if="!composeSuccessActive" class="cfw-panel-handle" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
         <div class="cfw-tab-body">
-          <template v-if="!store.textCreateSuccess">
+          <div v-if="!composeSuccessActive" class="cfw-compose-mode-toggle">
+            <button
+              type="button"
+              class="cfw-compose-mode-btn"
+              :class="{ active: store.composeMode === 'text' }"
+              @click="setComposeMode('text')"
+            >Text</button>
+            <button
+              type="button"
+              class="cfw-compose-mode-btn"
+              :class="{ active: store.composeMode === 'voice' }"
+              @click="setComposeMode('voice')"
+            >Voice</button>
+          </div>
+
+          <div
+            v-if="composeSuccessActive"
+            id="cfw-mv-compose-success"
+            class="cfw-m-success"
+            @click="dismissComposeSuccess()"
+          >
+            <div class="cfw-m-success-ring">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div class="cfw-m-success-hint">{{ composeSuccessText }}</div>
+            <button
+              v-if="composeUndoSeconds > 0 && store.lastSubmissionId"
+              id="cfw-mv-compose-undo"
+              class="cfw-m-undo-btn"
+              @click.stop="undoComposeSuccess()"
+            >Undo ({{ composeUndoSeconds }})</button>
+          </div>
+
+          <template v-else-if="store.composeMode === 'text'">
             <div id="cfw-mv-text-form" class="cfw-mf">
               <TextForm
                 ref="textFormRef"
@@ -48,26 +86,18 @@
               />
             </div>
           </template>
-          <div
-            v-else
-            id="cfw-mv-text-success"
-            class="cfw-m-success"
-            @click="text.reset()"
-          >
-            <div class="cfw-m-success-ring">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-              </svg>
-            </div>
-            <div class="cfw-m-success-hint">Tap to submit another</div>
-            <button
-              v-if="text.undoSecondsLeft.value > 0 && store.lastSubmissionId"
-              id="cfw-mv-text-undo"
-              class="cfw-m-undo-btn"
-              @click.stop="text.undo()"
-            >Undo ({{ text.undoSecondsLeft.value }})</button>
-          </div>
+
+          <template v-else>
+            <VoiceComposer
+              :mobile="true"
+              @toggle-recording="voice.toggleRecording"
+              @reset="voice.reset"
+              @send="voice.submit"
+            />
+          </template>
         </div>
+        <!-- Bottom dragger for middle position (hidden when showing success) -->
+        <div v-if="store.panelSnap === 'middle' && !composeSuccessActive" class="cfw-panel-handle cfw-panel-handle-bottom" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
       </div>
 
 
@@ -161,6 +191,7 @@
     :issue="sheet.sheetIssue.value"
     :filter-mode="sheet.filterMode.value"
     :edit-mode="sheet.editMode.value"
+    @action-done="onActionDone"
     @close="onLayerClose(2)"
     @cancel-edit="sheet.editMode.value = false"
     @filter-changed="loadIssues(true)"
@@ -184,6 +215,7 @@ import { useWidgetState } from '../composables/useWidgetState'
 import { usePanelSwipe } from '../composables/usePanelSwipe'
 import { useApi } from '../composables/useApi'
 import { useTextSubmission } from '../composables/useTextSubmission'
+import { useVoiceSubmission } from '../composables/useVoiceSubmission'
 import { useIssueSheet } from '../composables/useIssueSheet'
 import { useWidgetLauncher } from '../composables/useWidgetLauncher'
 import TextForm from './TextForm.vue'
@@ -191,6 +223,7 @@ import IssuesList from './IssuesList.vue'
 import IssueSheet from './IssueSheet.vue'
 import SettingsPane from './SettingsPane.vue'
 import ComposeSheet from './ComposeSheet.vue'
+import VoiceComposer from './VoiceComposer.vue'
 import type { SwipeActionType, IssueListItem } from '../types'
 
 const store = useWidgetStore()
@@ -200,6 +233,7 @@ const { loadIssues, authorize } = useApi()
 
 // Feature composables
 const text = useTextSubmission()
+const voice = useVoiceSubmission()
 const sheet = useIssueSheet()
 const launcher = useWidgetLauncher()
 
@@ -209,6 +243,9 @@ const panelStyle = computed(() => ({
   display: 'flex',
   flexDirection: 'column' as const,
 }))
+const composeSuccessActive = computed(() => store.textCreateSuccess || store.voiceCreateSuccess)
+const composeSuccessText = computed(() => store.voiceCreateSuccess ? 'Voice request submitted' : 'Tap to submit another')
+const composeUndoSeconds = computed(() => store.voiceCreateSuccess ? voice.undoSecondsLeft.value : text.undoSecondsLeft.value)
 
 function setMobileTab(tab: 'text' | 'list' | 'settings') {
   store.mobileTab = tab
@@ -219,6 +256,28 @@ function setMobileTab(tab: 'text' | 'list' | 'settings') {
     nextTick(() => textFormRef.value?.focusTitle())
   }
   persist()
+}
+
+function setComposeMode(mode: 'text' | 'voice') {
+  store.composeMode = mode
+  store.createError = ''
+  if (mode === 'text') {
+    nextTick(() => textFormRef.value?.focusTitle())
+  }
+  persist()
+}
+
+function dismissComposeSuccess() {
+  if (store.voiceCreateSuccess) voice.dismissSuccess()
+  else text.reset()
+}
+
+function undoComposeSuccess() {
+  if (store.voiceCreateSuccess) {
+    void voice.undo()
+  } else {
+    void text.undo()
+  }
 }
 
 const composeOpen = ref(false)
@@ -335,6 +394,8 @@ function handlePopstate(e: PopStateEvent) {
 // Cleanup timers and listeners on unmount
 onUnmounted(() => {
   text.stopUndoCountdown()
+  voice.stopUndoCountdown()
+  voice.stopVoiceTimer()
   window.removeEventListener('popstate', handlePopstate)
 })
 

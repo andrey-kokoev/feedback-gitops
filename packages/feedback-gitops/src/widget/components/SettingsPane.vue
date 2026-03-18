@@ -55,6 +55,81 @@
         >Bottom &#9660;</button>
       </div>
       <p class="cfw-m-settings-note">Or swipe the panel handle up or down.</p>
+      <h3>Text size</h3>
+      <div class="cfw-m-hand-toggle" style="margin-bottom: 8px;">
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.fontSize === 'small' }"
+          type="button"
+          @click="store.fontSize = 'small'; persist()"
+        >Small</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.fontSize === 'medium' }"
+          type="button"
+          @click="store.fontSize = 'medium'; persist()"
+        >Medium</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.fontSize === 'large' }"
+          type="button"
+          @click="store.fontSize = 'large'; persist()"
+        >Large</button>
+      </div>
+      <p class="cfw-m-settings-note">Adjust text size throughout the widget.</p>
+
+      <h3>Density</h3>
+      <div class="cfw-m-hand-toggle" style="margin-bottom: 8px;">
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.density === 'compact' }"
+          type="button"
+          @click="store.density = 'compact'; persist()"
+        >Compact</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.density === 'default' }"
+          type="button"
+          @click="store.density = 'default'; persist()"
+        >Default</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.density === 'comfortable' }"
+          type="button"
+          @click="store.density = 'comfortable'; persist()"
+        >Comfortable</button>
+      </div>
+      <p class="cfw-m-settings-note">Control spacing and row density throughout the widget.</p>
+
+      <h3>Theme</h3>
+      <div class="cfw-m-hand-toggle" style="margin-bottom: 8px;">
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.theme === 'ocean' }"
+          type="button"
+          @click="store.theme = 'ocean'; persist()"
+        >🌊 Ocean</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.theme === 'forest' }"
+          type="button"
+          @click="store.theme = 'forest'; persist()"
+        >🌲 Forest</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.theme === 'berry' }"
+          type="button"
+          @click="store.theme = 'berry'; persist()"
+        >🫐 Berry</button>
+        <button
+          class="cfw-m-hand-btn"
+          :class="{ active: store.theme === 'sunset' }"
+          type="button"
+          @click="store.theme = 'sunset'; persist()"
+        >🌅 Sunset</button>
+      </div>
+      <p class="cfw-m-settings-note">Choose your preferred color accent.</p>
+
       <h3>Swipe Actions</h3>
       <div class="cfw-m-swipe-settings">
         <div class="cfw-m-swipe-row">
@@ -90,6 +165,8 @@
       </div>
     </div>
     </div><!-- /cfw-tab-body -->
+    <!-- Bottom dragger for middle position -->
+    <div v-if="store.panelSnap === 'middle'" class="cfw-panel-handle cfw-panel-handle-bottom" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
   </div>
 </template>
 

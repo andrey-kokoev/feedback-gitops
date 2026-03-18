@@ -20,6 +20,9 @@ export const useWidgetStore = defineStore('widget', () => {
   const panelSnap = ref<'top' | 'middle' | 'bottom'>('bottom')
   const adminToken = ref('')
   const composeMode = ref<'text' | 'voice'>('text')
+  const fontSize = ref<'small' | 'medium' | 'large'>('medium')
+  const density = ref<'compact' | 'default' | 'comfortable'>('default')
+  const theme = ref<'ocean' | 'forest' | 'berry' | 'sunset'>('ocean')
 
   // Draft
   const draftTitle = ref('')
@@ -69,7 +72,7 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   return {
-    config, mobileTab, handedness, panelSnap, adminToken, composeMode,
+    config, mobileTab, handedness, panelSnap, adminToken, composeMode, fontSize, density, theme,
     draftTitle, draftDescription, draftMergePolicy, voiceDraftState, voiceDraftReady, voiceDraftDurationMs,
     mode, itemViews, swipeMapping,
     issues, issuesLoaded, loadingIssues, listView, listSort, listQuery, listStatusFilter,

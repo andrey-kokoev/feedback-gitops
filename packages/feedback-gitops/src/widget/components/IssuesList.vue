@@ -51,6 +51,8 @@
       </template>
     </div>
     </div><!-- /cfw-tab-body -->
+    <!-- Bottom dragger for middle position -->
+    <div v-if="store.panelSnap === 'middle'" class="cfw-panel-handle cfw-panel-handle-bottom" @touchstart.passive="onPanelTouchStart" @touchend="onPanelTouchEnd"><div class="cfw-panel-handle-bar"></div></div>
   </div>
 </template>
 
