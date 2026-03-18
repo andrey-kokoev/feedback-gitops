@@ -19,7 +19,7 @@
   "types": "./dist/lib.d.ts",
   "scripts": {
     "prepare": "tsc -p tsconfig.json",
-    "build:widget": "vite build --config widget/vite.config.ts",
+    "build:widget": "rm -f public/FeedbackWidget.ce-* public/index-* public/widget.js public/widget-integration.js public/widget-sandbox.js && vite build --config widget/vite.config.ts",
     "build:worker": "tsc -p tsconfig.json",
     "build": "pnpm build:widget && pnpm build:worker",
     "dev": "wrangler dev",

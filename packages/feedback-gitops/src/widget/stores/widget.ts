@@ -19,11 +19,15 @@ export const useWidgetStore = defineStore('widget', () => {
   const handedness = ref<'left' | 'right'>('right')
   const panelSnap = ref<'top' | 'middle' | 'bottom'>('bottom')
   const adminToken = ref('')
+  const composeMode = ref<'text' | 'voice'>('text')
 
   // Draft
   const draftTitle = ref('')
   const draftDescription = ref('')
   const draftMergePolicy = ref<'manual' | 'auto_unblocked'>('manual')
+  const voiceDraftState = ref<'idle' | 'recording' | 'paused'>('idle')
+  const voiceDraftReady = ref(false)
+  const voiceDraftDurationMs = ref(0)
 
   // Redesign state
   const mode = ref<WidgetMode>('technical_issue')
@@ -53,6 +57,7 @@ export const useWidgetStore = defineStore('widget', () => {
 
   // Success states (for undo)
   const textCreateSuccess = ref(false)
+  const voiceCreateSuccess = ref(false)
   const lastSubmissionId = ref<string | null>(null)
   const lastTextTitle = ref('')
   const lastTextDescription = ref('')
@@ -60,16 +65,17 @@ export const useWidgetStore = defineStore('widget', () => {
   function init(cfg: WidgetConfig) {
     config.value = cfg
     mobileTab.value = 'text'
+    composeMode.value = 'text'
   }
 
   return {
-    config, mobileTab, handedness, panelSnap, adminToken,
-    draftTitle, draftDescription, draftMergePolicy,
+    config, mobileTab, handedness, panelSnap, adminToken, composeMode,
+    draftTitle, draftDescription, draftMergePolicy, voiceDraftState, voiceDraftReady, voiceDraftDurationMs,
     mode, itemViews, swipeMapping,
     issues, issuesLoaded, loadingIssues, listView, listSort, listQuery, listStatusFilter,
     creating,
     createError, listError,
-    textCreateSuccess, lastSubmissionId, lastTextTitle, lastTextDescription,
+    textCreateSuccess, voiceCreateSuccess, lastSubmissionId, lastTextTitle, lastTextDescription,
     init,
   }
 })

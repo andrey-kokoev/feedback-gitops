@@ -17,12 +17,13 @@ export default defineConfig({
     cssCodeSplit: false,
     lib: {
       entry: {
+        'widget': resolve(__dirname, '../src/widget/main.ts'),
         'widget-integration': resolve(__dirname, '../src/widget/main-integration.ts'),
         'widget-sandbox': resolve(__dirname, '../src/widget/main-sandbox.ts'),
       },
       name: 'FeedbackGitopsWidget',
       fileName: (format, entryName) => `${entryName}.js`,
-      formats: ['es', 'cjs'],
+      formats: ['es'],
     },
     rollupOptions: {
       output: {

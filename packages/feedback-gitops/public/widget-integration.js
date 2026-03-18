@@ -1,5 +1,48 @@
-"use strict";const m=require("./FeedbackWidget.ce-eBhP_Ljw.cjs");function W(){const e=m.useWidgetStore();function a(){return e.config}function l(){return e.config.storageKey+":admin-token"}function u(){try{const t=localStorage.getItem(l())??"";return e.adminToken=t,t||null}catch{return null}}function h(t){try{t?localStorage.setItem(l(),t):localStorage.removeItem(l()),e.adminToken=t}catch{}}function y(){const t=window.prompt("Enter admin token",u()||"");if(t===null)return;const n=t.trim();h(n)}function g(){const t=u();return t||(y(),u())}function A(){return!!g()}function I(){return!!e.adminToken}function T(){h("")}function E(t){return String(t??"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim()}function p(t,n){const c=document.querySelector("feedback-gitops-widget");c&&c.dispatchEvent(new CustomEvent(`feedback:${t}`,{detail:n,bubbles:!0,composed:!0}))}async function f(t,n){const c=(t.headers.get("content-type")??"").toLowerCase();let o=null,i="";if(c.includes("application/json"))try{o=await t.json()}catch{throw new Error("Invalid JSON response from API.")}else try{i=await t.text()}catch{i=""}if(!t.ok){const s=o,d=s==null?void 0:s.error,w=d&&typeof d.code=="string"?d.code:"";if(w==="AGENT_WORKING")throw new Error("Copilot is still working on this draft pull request.");const b=(s==null?void 0:s.statusMessage)||(d==null?void 0:d.error)||E(i).slice(0,180)||n;throw new Error(w?`[${w}] ${b}`:b)}if(o!==null)return o;const r=i?E(i).slice(0,120):"";throw new Error("Unexpected non-JSON API response. Check widget endpoint configuration."+(r?" Response preview: "+r:""))}async function x(t=!1){if(e.loadingIssues&&!t)return;const n=u();if(!n)return;e.loadingIssues=!0,e.listError="";const c=new AbortController,o=window.setTimeout(()=>c.abort(),15e3);try{const i=new URLSearchParams;i.set("limit","50"),i.set("view",e.listView),i.set("sort",e.listSort),e.listQuery&&i.set("q",e.listQuery),e.listStatusFilter.length&&i.set("status",e.listStatusFilter.join(","));const r=await fetch(`${e.config.issuesEndpoint}?${i}`,{method:"GET",headers:{"x-admin-token":n},signal:c.signal}),s=await f(r,"Failed to load issues");e.issues=Array.isArray(s==null?void 0:s.issues)?s.issues:[],e.issuesLoaded=!0}catch(i){e.listError=i instanceof Error?i.message:"Failed to load issues"}finally{window.clearTimeout(o),e.loadingIssues=!1}}async function S(t,n,c){const o=g();if(!o)throw new Error("Admin token required");const i=e.draftMergePolicy,r=c?["agent-execute"]:[],s=await fetch(e.config.endpoint,{method:"POST",headers:{"content-type":"application/json","x-admin-token":o},body:JSON.stringify({title:t,description:n,url:window.location.href,userAgent:navigator.userAgent,labels:r,mergePolicy:i==="auto_unblocked"?"auto_unblocked":void 0,execute:c})}),d=await f(s,"Failed to create request");return p("item-action",{id:d.submissionId,action:"create"}),d}async function _(t,n,c){const o=g();if(!o)throw new Error("Admin token required");const i=n.includes("mp4")?"m4a":"webm",r=new FormData;r.append("audio",t,`voice-request.${i}`),r.append("mimeType",n||"audio/webm"),r.append("durationMs",String(c)),r.append("url",window.location.href),r.append("userAgent",navigator.userAgent),r.append("mergePolicy",e.draftMergePolicy);const s=await fetch(e.config.endpoint,{method:"POST",headers:{"x-admin-token":o},body:r});return f(s,"Failed to submit voice request")}async function C(t,n){const c=g();if(!c)throw new Error("Admin token required");const o=await fetch(e.config.actionEndpoint,{method:"POST",headers:{"content-type":"application/json","x-admin-token":c},body:JSON.stringify({issueNumber:t,target:"issue",action:"comment",body:n})});await f(o,"Failed to submit comment"),p("item-action",{id:t,action:"comment"})}async function O(t,n,c,o){const i=g();if(!i)throw new Error("Admin token required");const r=await fetch(e.config.endpoint,{method:"POST",headers:{"content-type":"application/json","x-admin-token":i},body:JSON.stringify({title:n,description:c,sourceIssueNumber:t,url:window.location.href,userAgent:navigator.userAgent,labels:o?["agent-execute"]:[],execute:o})}),s=await f(r,"Failed to create linked item");return p("item-action",{id:s.submissionId,action:"create_linked_item"}),s}async function F(t,n,c="issue",o){const i=g();if(!i)throw new Error("Admin token required");const r={issueNumber:t,target:c,action:n};(o==null?void 0:o.title)!==void 0&&(r.title=o.title),(o==null?void 0:o.body)!==void 0&&(r.body=o.body);const s=await fetch(e.config.actionEndpoint,{method:"POST",headers:{"content-type":"application/json","x-admin-token":i},body:JSON.stringify(r)}),d=await f(s,"Failed to apply action");return p("item-action",{id:t,action:n}),d}async function v(t){const n=u();if(n)try{await fetch(e.config.cancelEndpoint,{method:"POST",headers:{"content-type":"application/json","x-admin-token":n},body:JSON.stringify({submissionId:t})})}catch{}}function q(t){return t.includes("AGENT_WORKING")?"Copilot is still working on this draft pull request.":t.includes("AUTO_MERGE_ENABLE_FAILED")?"GitHub rejected enabling auto-merge. Check PR checks/rules and retry.":t.includes("AUTO_MERGE_CONFIRM_FAILED")||t.includes("AUTO_MERGE_NOT_ENABLED")?"Merge request was recorded but auto-merge was not confirmed. Retry merge request.":"Failed to apply action."}function P(t){const n=t;return n!=null&&n.issue&&typeof n.issue.url=="string"?n.issue.url:typeof(n==null?void 0:n.url)=="string"?n.url:""}return{getConfig:a,authorize:A,hasAccess:I,readToken:u,requireToken:g,promptToken:y,clearToken:T,loadIssues:x,submitText:S,submitVoice:_,submitComment:C,createLinkedItem:O,executeAction:F,cancelSubmission:v,mapActionError:q,getIssueUrlFromCreateResponse:P}}function N(){const e=window.__WIDGET_CONFIG__;if(!e)throw new Error("Missing widget dev config: window.__WIDGET_CONFIG__ is undefined");const a=(e.endpoint??"").replace(/\/+$/,"");function l(u){return a.endsWith("/api/issue")?a.slice(0,a.length-10)+u:a+u.replace("/api","")}return{endpoint:a||"/api/issue",issuesEndpoint:e.issuesEndpoint??l("/api/issues"),actionEndpoint:e.actionEndpoint??l("/api/action"),cancelEndpoint:e.cancelEndpoint??l("/api/cancel"),repo:e.repo??"",labels:e.labels??"",storageKey:e.storageKey??"thoughts"}}const G=m.createPinia(),R=m.defineCustomElement(m.FeedbackWidgetCE,{configureApp(e){e.use(G),e.provide("widget-adapter",W())}});customElements.get("feedback-gitops-widget")||customElements.define("feedback-gitops-widget",R);function k(){if(console.log("[Widget Integration] Bootstrap started"),document.querySelector("feedback-gitops-widget")){console.log("[Widget Integration] Element already exists");return}try{const e=N();if(console.log("[Widget Integration] Config found:",e),!customElements.get("feedback-gitops-widget"))throw new Error("Custom element feedback-gitops-widget not defined");console.log("[Widget Integration] Custom element defined");const a=document.createElement("feedback-gitops-widget");a.widgetConfig=e,document.body.appendChild(a),console.log("[Widget Integration] Element appended to body")}catch(e){console.error("[Widget Integration] Boot failure:",e);const a=document.createElement("div");a.style.cssText="position: fixed; bottom: 20px; right: 20px; background: #fee2e2; border: 2px solid #ef4444; color: #991b1b; padding: 16px; border-radius: 8px; z-index: 99999; font-family: sans-serif;",a.innerHTML=`
+import { c as d, d as s, F as r } from "./FeedbackWidget.ce-BWELuyvg.js";
+import { c as a } from "./index-BNRiC6Yd.js";
+function c() {
+  const e = window.__WIDGET_CONFIG__;
+  if (!e) throw new Error("Missing widget dev config: window.__WIDGET_CONFIG__ is undefined");
+  const t = (e.endpoint ?? "").replace(/\/+$/, "");
+  function o(n) {
+    return t.endsWith("/api/issue") ? t.slice(0, t.length - 10) + n : t + n.replace("/api", "");
+  }
+  return {
+    endpoint: t || "/api/issue",
+    issuesEndpoint: e.issuesEndpoint ?? o("/api/issues"),
+    actionEndpoint: e.actionEndpoint ?? o("/api/action"),
+    cancelEndpoint: e.cancelEndpoint ?? o("/api/cancel"),
+    repo: e.repo ?? "",
+    labels: e.labels ?? "",
+    storageKey: e.storageKey ?? "thoughts"
+  };
+}
+const g = d(), p = s(r, {
+  configureApp(e) {
+    e.use(g), e.provide("widget-adapter", a());
+  }
+});
+customElements.get("feedback-gitops-widget") || customElements.define("feedback-gitops-widget", p);
+function i() {
+  if (console.log("[Widget Integration] Bootstrap started"), document.querySelector("feedback-gitops-widget")) {
+    console.log("[Widget Integration] Element already exists");
+    return;
+  }
+  try {
+    const e = c();
+    if (console.log("[Widget Integration] Config found:", e), !customElements.get("feedback-gitops-widget"))
+      throw new Error("Custom element feedback-gitops-widget not defined");
+    console.log("[Widget Integration] Custom element defined");
+    const t = document.createElement("feedback-gitops-widget");
+    t.widgetConfig = e, document.body.appendChild(t), console.log("[Widget Integration] Element appended to body");
+  } catch (e) {
+    console.error("[Widget Integration] Boot failure:", e);
+    const t = document.createElement("div");
+    t.style.cssText = "position: fixed; bottom: 20px; right: 20px; background: #fee2e2; border: 2px solid #ef4444; color: #991b1b; padding: 16px; border-radius: 8px; z-index: 99999; font-family: sans-serif;", t.innerHTML = `
       <h3 style="margin-top:0;margin-bottom:8px;">Widget failed to mount</h3>
       <p style="margin:0;font-size:14px;"><strong>Reason:</strong> ${e.message}</p>
       <p style="margin-top:8px;margin-bottom:0;font-size:14px;">Check browser console. Entry script did not bootstrap correctly.</p>
-    `,document.body.appendChild(a)}}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",k):k();
+    `, document.body.appendChild(t);
+  }
+}
+document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", i) : i();

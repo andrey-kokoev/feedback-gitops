@@ -22,13 +22,19 @@ export function useWidgetState() {
       const saved = JSON.parse(raw)
       if (!saved || typeof saved !== 'object') return
 
+      if (saved.composeMode === 'text' || saved.composeMode === 'voice') {
+        store.composeMode = saved.composeMode
+      } else if (saved.captureMode === 'voice') {
+        store.composeMode = 'voice'
+      } else if (saved.captureMode === 'text') {
+        store.composeMode = 'text'
+      }
+
       // Restore mobile tab — handle legacy 'requests' value
       if (['text', 'list', 'settings'].includes(saved.mobileTab)) {
         store.mobileTab = saved.mobileTab
       } else if (saved.mobileTab === 'requests' || saved.activeTab === 'requests') {
         store.mobileTab = 'list'
-      } else if (saved.mobileTab === 'voice') {
-        store.mobileTab = 'text' // Auto-fallback voice tab
       }
 
       if (Array.isArray(saved.issues)) store.issues = saved.issues
@@ -59,6 +65,7 @@ export function useWidgetState() {
     try {
       localStorage.setItem(storageKey(), JSON.stringify({
         mobileTab: store.mobileTab,
+        composeMode: store.composeMode,
         issues: store.issues,
         issuesLoaded: store.issuesLoaded,
         listView: store.listView,
